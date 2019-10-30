@@ -23,9 +23,7 @@ The main resource we would need are HTM capable machines. We believe most modern
 ## Goals and Deliverables
 
 ### Plan to Achieve
-- Implement B-Tree
 - Implement B-Tree using HTM
-- Implement Skip List
 - Implement Skip List using HTM
 - Evaluate HTM B-Tree and HTM Skip List performance
 - Compare HTM B-tree and HTM Skip List performance to state of the art database indexes
@@ -42,4 +40,18 @@ We plan to implement these data structures in C++ as there are many C++ compiler
 
 # Schedule
 
+| Week  | Goal                                                  |
+| ------| ----------------------------------------------------- |
+| 1     | Implement B-Tree, Implement HTM optimized B-Tree      |
+| 2     | Implement Skip List, Implement HTM optimized Skip List|
+| 3     | Analyze performance of Skip List and B-Tree           |
+| 4     | Adapt ART Index for HTM and evaluate performance      |
+| 5     | Finalize implementations and evaluation results       |
+
 # References
+
+[1] Wang, Ziqi., et al. “Building a Bw-Tree Takes More Than Just Buzz Words.” SIGMOD '18 Proceedings of the 2018 International Conference on Management of Data, pp. 473–488 .
+[2] Makreshanski, Darko., et al. “To Lock, Swap, or Elide: On the Interplay of Hardware Transactional Memory and Lock-Free Indexing.” VLDB Endowment, 41st International Conference on Very Large Data Bases (VLDB 2015): Proceedings of the VLDB Endowment, Volume 8, Number 1-13, Kohala Coast, Hawaii, USA, 31 August-4 September 2015, 2015, pp. 1298–1309.
+[3] Brown, Trevor. “A Template for Implementing Fast Lock-Free Trees Using HTM.”
+[4] Leis, Viktor, et al. “The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases.” 2013 IEEE 29th International Conference on Data Engineering (ICDE).
+

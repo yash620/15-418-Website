@@ -50,8 +50,11 @@ We plan to implement these data structures in C++ as there are many C++ compiler
 
 # References
 
-[1] Wang, Ziqi., et al. “Building a Bw-Tree Takes More Than Just Buzz Words.” SIGMOD '18 Proceedings of the 2018 International Conference on Management of Data, pp. 473–488 .
+[1] Wang, Ziqi., et al. “Building a Bw-Tree Takes More Than Just Buzz Words.” SIGMOD '18 Proceedings of the 2018 International Conference on Management of Data, pp. 473–488.
+
 [2] Makreshanski, Darko., et al. “To Lock, Swap, or Elide: On the Interplay of Hardware Transactional Memory and Lock-Free Indexing.” VLDB Endowment, 41st International Conference on Very Large Data Bases (VLDB 2015): Proceedings of the VLDB Endowment, Volume 8, Number 1-13, Kohala Coast, Hawaii, USA, 31 August-4 September 2015, 2015, pp. 1298–1309.
+
 [3] Brown, Trevor. “A Template for Implementing Fast Lock-Free Trees Using HTM.”
+
 [4] Leis, Viktor, et al. “The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases.” 2013 IEEE 29th International Conference on Data Engineering (ICDE).
 

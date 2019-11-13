@@ -179,6 +179,32 @@ namespace btreesinglethread {
                 root = new BTreeLeaf<Key,Value>();
             }
 
+            bool checkTree() {
+                int height = checkTreeRecursive(root);
+                return height != -1;
+            }
+
+            int checkTreeRecursive(NodeBase *node) {
+                if(node->type == PageType::BTreeInner) {
+                    auto inner = static_cast<BTreeInner<Key>*>(node);
+                    int height1  = 0, height2 = 0;
+                    for(auto child: inner->children) {
+                        if(height1 == 0) {
+                            height1 = checkTreeRecursive(child);
+                        } else {
+                            height2 = checkTreeRecursive(child);
+                        }
+
+                        if(height1 != height2 || height1 == -1 || height2 == -1) {
+                            return -1;
+                        }
+                    }
+                    return height1;
+                } else {
+                    return 1;
+                }
+            }
+
             void makeRoot(Key k,NodeBase* leftChild,NodeBase* rightChild) {
                 auto inner = new BTreeInner<Key>();
                 inner->count = 1;

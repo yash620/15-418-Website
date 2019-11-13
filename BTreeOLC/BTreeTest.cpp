@@ -1,7 +1,6 @@
 #include "BTreeOLC.h"
 #include "BTree_single_threaded.h"
 #include <cassert>
-#include <iostream>
 
 
 int main() {
@@ -11,10 +10,11 @@ int main() {
 
     for(auto i = 0; i < 6; i++){
         idx.insert(keys[i], values[i]);
-    } 
+    }
 
+    assert(idx.checkTree());
     for(int i = 0; i < 6; i++){
-        int64_t result; 
+        int64_t result;
         assert(idx.lookup(keys[i], result));
         assert(result == values[i]);
     }

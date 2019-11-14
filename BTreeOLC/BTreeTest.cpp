@@ -8,7 +8,7 @@
 #define NUM_ELEMENTS 500
 
 int main() {
-    btreertm::BTree<int64_t, int64_t> idx;
+    btreeolc::BTree<int64_t, int64_t> idx;
 
     std::vector<int64_t> keys;
     std::vector<int64_t> values;

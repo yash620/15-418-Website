@@ -10,6 +10,7 @@
 #include <atomic>
 #include <immintrin.h>
 #include <sched.h>
+#include <iostream>
 
 namespace btreeolc {
 
@@ -235,6 +236,34 @@ namespace btreeolc {
                 root = new BTreeLeaf<Key,Value>();
             }
 
+            bool checkTree() {
+                int height = checkTreeRecursive(root);
+                std::cout << height << std::endl;
+                return height != -1;
+            }
+
+            int checkTreeRecursive(NodeBase *node) {
+                if(node->type == PageType::BTreeInner) {
+                    auto inner = static_cast<BTreeInner<Key>*>(node);
+                    int height1  = 0, height2 = 0;
+                    for(int i = 0; i < inner->count; i++) {
+                        auto child = inner->children[i];
+                        if(height1 == 0) {
+                            height1 = checkTreeRecursive(child);
+                        } else {
+                            height2 = checkTreeRecursive(child);
+                        }
+
+                        if((height2 != 0 && height1 != height2) || height1 == -1 || height2 == -1) {
+                            std::cout << height1 << " " << height2 << std::endl;
+                            return -1;
+                        }
+                    }
+                    return height1;
+                } else {
+                    return 1;
+                }
+            }
             void makeRoot(Key k,NodeBase* leftChild,NodeBase* rightChild) {
                 auto inner = new BTreeInner<Key>();
                 inner->count = 1;

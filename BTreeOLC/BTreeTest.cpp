@@ -10,7 +10,7 @@
 #define NUM_ELEMENTS 500
 
 int main() {
-    btreeolc::BTree<int64_t, int64_t> idx;
+    btreertm::BTree<int64_t, int64_t> idx;
 
     srand(time(NULL));
     std::vector<int64_t> keys;

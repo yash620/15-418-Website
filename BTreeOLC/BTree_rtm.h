@@ -35,7 +35,9 @@ namespace btreertm{
 
         // Try to execute operation with RTM, loop until successful 
         void readLockExecute(std::function<void()> const& operation) {
+            int restartCount = 0;
             while(true) {
+                yield(restartCount++);
                 if(_xbegin() == _XBEGIN_STARTED) {
                     if(lockMutex.try_lock()) {
                         lockMutex.unlock();
@@ -49,6 +51,13 @@ namespace btreertm{
                     continue;
                 }
             }
+        }
+
+        void yield(int count) {
+            if (count>3)
+                sched_yield();
+            else
+                _mm_pause();
         }
     };
 
@@ -250,7 +259,11 @@ namespace btreertm{
             }
 
             void insert(Key k, Value v) {
+                _xbegin();
         restart:
+                _xend();
+                if(_xbegin() != _XBEGIN_STARTED)
+                    goto restart;
                 // Current node
                 NodeBase* node = root;
 
@@ -290,12 +303,17 @@ namespace btreertm{
                 } else {
                     // only lock leaf node
                     leaf->insert(k, v);
-                    return; // success
+                    // success
                 }
+                _xend();
             }
 
             bool lookup(Key k, Value& result) {
+                _xbegin();
 restart:
+                _xend();
+                if(_xbegin() != _XBEGIN_STARTED)
+                    goto restart;
                 NodeBase* node = root;
 
                 // Parent of current node
@@ -316,7 +334,8 @@ restart:
                     success = true;
                     result = leaf->payloads[pos];
                 }
-
+                
+                _xend();
                 return success;
             }
 

@@ -250,13 +250,14 @@ namespace btreertm{
             void insert(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                if(_xbegin() != _XBEGIN_STARTED)
-                    if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                        fprintf(stderr, "Going to latched version \n");
-                        insertLatched(k, v);
-                        return; 
-                    }
+                if(restartCount++ > MAX_TRANSACTION_RESTART) { 
+                    fprintf(stderr, "Going to latched version \n");
+                    return; 
+                }
+
+                if(_xbegin() != _XBEGIN_STARTED) 
                     goto restart;
+
                 // Current node
                 NodeBase* node = root;
 
@@ -318,7 +319,7 @@ namespace btreertm{
             void insertLatched(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                //fprintf(stderr, "On restart count %d \n", restartCount++);
+                fprintf(stderr, "On latched restart count %d \n", restartCount++);
                 // Current node
                 NodeBase* node = root;
                 node->lockShared();

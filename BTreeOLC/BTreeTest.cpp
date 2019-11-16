@@ -31,7 +31,7 @@ int main() {
 
     fprintf(stderr, "Got here");
     for(auto i = 0; i < NUM_ELEMENTS; i++){
-        fprintf(stderr, "Inserted %d \n", i);
+        fprintf(stderr, "Inserted # %d, Key: %lld, value: %lld \n", i, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
 
@@ -40,8 +40,8 @@ int main() {
         int64_t result;
         assert(idx.lookup(keys[i], result));
         if(result != values[i]) {
-            printf("Looking up: %lld \n", keys[i]);
-            printf("Result %lld, value %lld \n", result, values[i]);
+            fprintf(stderr, "Looking up: %lld \n", keys[i]);
+            fprintf(stderr, "Result %lld, value %lld \n", result, values[i]);
         }
         assert(result == values[i]);
     }

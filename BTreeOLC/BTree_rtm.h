@@ -9,6 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
+#define MAX_TRANSACTION_RESTART 40
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -27,14 +28,17 @@ namespace btreertm{
         } 
 
         void unlockExclusive() {
+            version; 
             nodeLatch.unlock();
         }
 
         void lockShared() {
+            version;
             nodeLatch.lock_shared();
         }
 
         void unLockShared() {
+            version;
             nodeLatch.unlock_shared();
         }
 
@@ -243,10 +247,14 @@ namespace btreertm{
             }
 
             void insert(Key k, Value v) {
-                //_xbegin();
+                int restartCount = 0;
         restart:
-                //_xend();
                 if(_xbegin() != _XBEGIN_STARTED)
+                    if(restartCount++ > MAX_TRANSACTION_RESTART) { 
+                        fprintf(stderr, "Going to latched version \n");
+                        insertLatched(k, v);
+                        return; 
+                    }
                     goto restart;
                 // Current node
                 NodeBase* node = root;
@@ -256,6 +264,12 @@ namespace btreertm{
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
+
+                    //Touch parent lock data to ensure atomicity
+                    inner->version;
+                    if(parent) {
+                        parent->version;
+                    }
 
                     // Split eagerly if full
                     if (inner->isFull()) {
@@ -276,6 +290,12 @@ namespace btreertm{
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
 
+                //Touch parent lock data to ensure atomicity
+                leaf->version;
+                if(parent) {
+                    parent->version; 
+                }
+
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Split
@@ -295,7 +315,9 @@ namespace btreertm{
             }
 
             void insertLatched(Key k, Value v) {
+                int restartCount = 0;
         restart:
+                fprintf(stderr, "On restart count %d \n", restartCount++);
                 // Current node
                 NodeBase* node = root;
                 node->lockShared();
@@ -388,7 +410,7 @@ namespace btreertm{
                     goto restart;
                 } else {
                     // only lock leaf node
-                    needRestart = leaf->upgradeToExlusive();
+                    needRestart = leaf->upgradeToExclusive();
                     if (needRestart){
                         if(parent){
                             parent->unLockShared();
@@ -399,7 +421,7 @@ namespace btreertm{
                         parent->unLockShared();
                     }
                     leaf->insert(k, v);
-                    node->unlockExclusive();
+                    leaf->unlockExclusive();
                     return; // success
                 }
             }

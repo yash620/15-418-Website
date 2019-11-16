@@ -42,15 +42,16 @@ namespace btreertm{
             nodeLatch.unlock_shared();
         }
 
+        // Returns true if fails needs restart, returns false otherwise. 
         bool upgradeToExclusive() {
             int currVersion = version;
             unLockShared();
             lockExclusive();
             if(currVersion != version) {
                 unlockExclusive();
-                return false;
+                return true;
             }
-            return true;
+            return false;
         }
     };
 
@@ -317,7 +318,7 @@ namespace btreertm{
             void insertLatched(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                fprintf(stderr, "On restart count %d \n", restartCount++);
+                //fprintf(stderr, "On restart count %d \n", restartCount++);
                 // Current node
                 NodeBase* node = root;
                 node->lockShared();

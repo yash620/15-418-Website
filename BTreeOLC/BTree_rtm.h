@@ -254,7 +254,7 @@ namespace btreertm{
                 int restartCount = 0;
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    fprintf(stderr, "Going to latched version \n");
+                    //fprintf(stderr, "Going to latched version \n");
                     insertLatched(k, v);
                     return; 
                 }
@@ -323,13 +323,13 @@ namespace btreertm{
             void insertLatched(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                fprintf(stderr, "On latched restart count %d \n", restartCount++);
+                //fprintf(stderr, "On latched restart count %d \n", restartCount++);
                 // Current node
                 NodeBase* node = root;
                 node->lockShared();
                 if (node != root) {
                     node->unLockShared(); 
-                    fprintf(stderr, "Restart at loc %d \n", 1);
+                    //fprintf(stderr, "Restart at loc %d \n", 1);
                     goto restart;
                 }
 
@@ -346,7 +346,7 @@ namespace btreertm{
                             needRestart = parent->upgradeToExclusive();
                             if (needRestart){ 
                                 inner->unLockShared();
-                                fprintf(stderr, "Restart at loc %d \n", 2);
+                                //fprintf(stderr, "Restart at loc %d \n", 2);
                                 goto restart;
                             }
                         }
@@ -354,7 +354,7 @@ namespace btreertm{
                         if (needRestart) {
                             if (parent)
                                 parent->unlockExclusive();
-                            fprintf(stderr, "Restart at loc %d \n", 3);
+                            //fprintf(stderr, "Restart at loc %d \n", 3);
                             goto restart;
                         }
                         if (!parent && (node != root)) { // there's a new parent
@@ -371,7 +371,7 @@ namespace btreertm{
                         inner->unlockExclusive();
                         if (parent)
                             parent->unlockExclusive();
-                        fprintf(stderr, "Restart at loc %d \n", 4);
+                        //fprintf(stderr, "Restart at loc %d \n", 4);
                         goto restart;
                     }
 

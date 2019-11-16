@@ -214,6 +214,7 @@ namespace btreertm{
 
             bool checkTree() {
                 int height = checkTreeRecursive(root);
+                std::cout << height << std::endl;
                 return height != -1;
             }
 
@@ -221,7 +222,8 @@ namespace btreertm{
                 if(node->type == PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
                     int height1  = 0, height2 = 0;
-                    for(auto child: inner->children) {
+                    for(int i = 0; i < inner->count; i++) {
+                        auto child = inner->children[i];
                         if(height1 == 0) {
                             height1 = checkTreeRecursive(child);
                         } else {
@@ -229,6 +231,7 @@ namespace btreertm{
                         }
 
                         if((height2 != 0 && height1 != height2) || height1 == -1 || height2 == -1) {
+                            std::cout << height1 << " " << height2 << std::endl;
                             return -1;
                         }
                     }

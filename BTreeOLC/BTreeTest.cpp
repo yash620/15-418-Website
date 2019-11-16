@@ -10,7 +10,7 @@
 #include <thread>
 
 #define NUM_ELEMENTS 500
-#define NUM_ELEMENTS_MULTI 5000
+#define NUM_ELEMENTS_MULTI 30000
 
 void generateRandomValues(
     int numValues, 
@@ -26,11 +26,13 @@ void generateRandomValues(
 
         keys.push_back(randKey);
         values.push_back(rand() % 30000);
+        fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
     }
 }
 
 template <class Index> 
 void indexInsert(
+    int threadId,
     Index &idx, 
     int startValue, 
     int endValue, 
@@ -38,6 +40,7 @@ void indexInsert(
     std::vector<int64_t>& values
 ) {
     for(auto i = startValue; i < endValue; i++){
+        fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
 }
@@ -49,15 +52,15 @@ void testTreeSingleThreaded(Index& idx) {
 
     generateRandomValues(NUM_ELEMENTS, keys, values);
 
-    indexInsert<Index>(idx, 0, keys.size(), keys, values); 
+    indexInsert<Index>(0, idx, 0, keys.size(), keys, values); 
 
     assert(idx.checkTree());
     for(int i = 0; i < keys.size(); i++){
         int64_t result;
         assert(idx.lookup(keys[i], result));
         if(result != values[i]) {
-            printf("Looking up: %lld \n", keys[i]);
-            printf("Result %lld, value %lld \n", result, values[i]);
+            fprintf(stderr,"Looking up: %lld \n", keys[i]);
+            fprintf(stderr,"Result %lld, value %lld \n", result, values[i]);
         }
         assert(result == values[i]);
     } 
@@ -74,14 +77,14 @@ void testMultiThreaded(Index &idx, int numThreads) {
     
     int i;
     for(i = 0; i < numThreads-1; i++) {
-        threads.push_back(std::thread([&](){
-            indexInsert<Index>(idx, i * numValuesPerThreads, (i+1) * numValuesPerThreads, keys, values);
-        }));
+        threads.push_back(std::thread([&](int threadId){
+            indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+        }, i));
     }
 
-    threads.push_back(std::thread([&](){
-        indexInsert<Index>(idx, i * numValuesPerThreads, keys.size(), keys, values);
-    }));
+    threads.push_back(std::thread([&](int threadId){
+        indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, keys.size(), keys, values);
+    }, i));
 
     for(std::thread& t : threads) {
         t.join(); 
@@ -92,8 +95,8 @@ void testMultiThreaded(Index &idx, int numThreads) {
         int64_t result;
         assert(idx.lookup(keys[i], result));
         if(result != values[i]) {
-            printf("Looking up: %lld \n", keys[i]);
-            printf("Result %lld, value %lld \n", result, values[i]);
+            fprintf(stderr,"Looking up: %lld \n", keys[i]);
+            fprintf(stderr,"Result %lld, value %lld \n", result, values[i]);
         }
         assert(result == values[i]);
     } 
@@ -104,18 +107,18 @@ int main() {
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
 
-    printf("Testing Single Threaded idx_rtm");
-    testTreeSingleThreaded(idx_rtm);
+    //fprintf\(stderr,"Testing Single Threaded idx_rtm");
+    //testTreeSingleThreaded(idx_rtm);
 
-    printf("Testing Single Threaded idx_olc");
-    testTreeSingleThreaded(idx_olc);
+    //fprintf\(stderr,"Testing Single Threaded idx_olc");
+    //testTreeSingleThreaded(idx_olc);
     
-    printf("Testing Single Threaded idx_single");
-    testTreeSingleThreaded(idx_single);
+    //fprintf\(stderr,"Testing Single Threaded idx_single");
+    //testTreeSingleThreaded(idx_single);
 
-    printf("Testing MultiThreaded idx_olc");
-    testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 5);
+    //fprintf\(stderr,"Testing MultiThreaded idx_olc");
+    //testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
-    printf("Testing MultiThreaded idx_rtm");
-    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 5);
+    fprintf(stderr,"Testing MultiThreaded idx_rtm");
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
 }

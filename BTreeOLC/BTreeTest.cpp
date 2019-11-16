@@ -74,10 +74,14 @@ void testMultiThreaded(Index &idx, int numThreads) {
     
     int i;
     for(i = 0; i < numThreads-1; i++) {
-        threads.push_back(std::thread(indexInsert<Index>, idx, i * numValuesPerThreads, (i+1) * numValuesPerThreads, keys, values));
+        threads.push_back(std::thread([&](){
+            indexInsert<Index>(idx, i * numValuesPerThreads, (i+1) * numValuesPerThreads, keys, values);
+        }));
     }
 
-    threads.push_back(std::thread(indexInsert<Index>, idx, i * numValuesPerThreads, keys.size(), keys, values));
+    threads.push_back(std::thread([&](){
+        indexInsert<Index>(idx, i * numValuesPerThreads, keys.size(), keys, values);
+    }));
 
     for(std::thread& t : threads) {
         t.join(); 

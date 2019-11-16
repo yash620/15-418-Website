@@ -228,7 +228,7 @@ namespace btreertm{
                             height2 = checkTreeRecursive(child);
                         }
 
-                        if(height1 != height2 || height1 == -1 || height2 == -1) {
+                        if((height2 != 0 && height1 != height2) || height1 == -1 || height2 == -1) {
                             return -1;
                         }
                     }

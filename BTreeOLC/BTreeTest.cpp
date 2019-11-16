@@ -1,3 +1,4 @@
+//#include "BTreeOLC.h"
 #include "BTreeOLC.h"
 #include "BTree_single_threaded.h"
 #include "BTree_rtm.h"
@@ -28,7 +29,9 @@ int main() {
         //values.push_back(i * 10);
     }
 
+    fprintf(stderr, "Got here");
     for(auto i = 0; i < NUM_ELEMENTS; i++){
+        fprintf(stderr, "Inserted %d \n", i);
         idx.insert(keys[i], values[i]);
     }
 

@@ -6,6 +6,7 @@
 #include <immintrin.h>
 #include <sched.h>
 #include <mutex>
+#include <functional>
 
 namespace btreertm{
 
@@ -259,9 +260,9 @@ namespace btreertm{
             }
 
             void insert(Key k, Value v) {
-                _xbegin();
+                //_xbegin();
         restart:
-                _xend();
+                //_xend();
                 if(_xbegin() != _XBEGIN_STARTED)
                     goto restart;
                 // Current node
@@ -281,6 +282,7 @@ namespace btreertm{
                             parent->insert(sep,newInner);
                         else
                             makeRoot(sep,inner,newInner);
+                        _xend(); 
                         goto restart;
                     }
 
@@ -299,6 +301,7 @@ namespace btreertm{
                         parent->insert(sep, newLeaf);
                     else
                         makeRoot(sep, leaf, newLeaf);
+                    _xend();
                     goto restart;
                 } else {
                     // only lock leaf node
@@ -309,9 +312,7 @@ namespace btreertm{
             }
 
             bool lookup(Key k, Value& result) {
-                _xbegin();
 restart:
-                _xend();
                 if(_xbegin() != _XBEGIN_STARTED)
                     goto restart;
                 NodeBase* node = root;

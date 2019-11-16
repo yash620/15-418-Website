@@ -7,6 +7,7 @@
 #include <sched.h>
 #include <mutex>
 #include <functional>
+#include <shared_mutex>
 
 namespace btreertm{
 
@@ -14,57 +15,39 @@ namespace btreertm{
 
     static const uint64_t pageSize=4*1024;
 
-    struct RtmRWLock {
-        std::mutex lockMutex;
-
-        // Try to execute operation with RTM, if it fails take explcit lock 
-        void writeLockExecute(std::function<void()> const& operation) {
-            if( _xbegin() == _XBEGIN_STARTED ) {
-                if(lockMutex.try_lock()){
-                    lockMutex.unlock();
-                    operation();
-                } else {
-                    _xabort(1);
-                }
-                _xend();
-            } else {
-                lockMutex.lock();
-                operation();
-                lockMutex.unlock(); 
-            }
-        }
-
-        // Try to execute operation with RTM, loop until successful 
-        void readLockExecute(std::function<void()> const& operation) {
-            int restartCount = 0;
-            while(true) {
-                yield(restartCount++);
-                if(_xbegin() == _XBEGIN_STARTED) {
-                    if(lockMutex.try_lock()) {
-                        lockMutex.unlock();
-                        operation();
-                    } else {
-                        _xabort(1);
-                    }
-                    _xend();
-                    break;
-                } else {
-                    continue;
-                }
-            }
-        }
-
-        void yield(int count) {
-            if (count>3)
-                sched_yield();
-            else
-                _mm_pause();
-        }
-    };
-
-    struct NodeBase : RtmRWLock{
+    struct NodeBase {
         PageType type;
         uint16_t count;
+        std::shared_mutex nodeLatch; 
+        int version = 0;
+
+        void lockExclusive() {
+            nodeLatch.lock();
+            version++;
+        } 
+
+        void unlockExclusive() {
+            nodeLatch.unlock();
+        }
+
+        void lockShared() {
+            nodeLatch.lock_shared();
+        }
+
+        void unLockShared() {
+            nodeLatch.unlock_shared();
+        }
+
+        bool upgradeToExclusive() {
+            int currVersion = version;
+            unLockShared();
+            lockExclusive();
+            if(currVersion != version) {
+                unlockExclusive();
+                return false;
+            }
+            return true;
+        }
     };
 
     struct BTreeLeafBase : public NodeBase {
@@ -309,6 +292,116 @@ namespace btreertm{
                     // success
                 }
                 _xend();
+            }
+
+            void insertLatched(Key k, Value v) {
+        restart:
+                // Current node
+                NodeBase* node = root;
+                node->lockShared();
+                if (node != root) {
+                    node->unLockShared(); 
+                    goto restart;
+                }
+
+                // Parent of current node
+                BTreeInner<Key>* parent = nullptr;
+                bool needRestart; 
+                while (node->type==PageType::BTreeInner) {
+                    auto inner = static_cast<BTreeInner<Key>*>(node);
+
+                    // Split eagerly if full
+                    if (inner->isFull()) {
+                        // Lock
+                        if (parent) {
+                            needRestart = parent->upgradeToExclusive();
+                            if (needRestart){ 
+                                inner->unLockShared();
+                                goto restart;
+                            }
+                        }
+                        needRestart = inner->upgradeToExclusive();
+                        if (needRestart) {
+                            if (parent)
+                                parent->unlockExclusive();
+                            goto restart;
+                        }
+                        if (!parent && (node != root)) { // there's a new parent
+                            inner->unlockExclusive();
+                            goto restart;
+                        }
+                        // Split
+                        Key sep; BTreeInner<Key>* newInner = inner->split(sep);
+                        if (parent)
+                            parent->insert(sep,newInner);
+                        else
+                            makeRoot(sep,inner,newInner);
+                        // Unlock and restart
+                        inner->unlockExclusive();
+                        if (parent)
+                            parent->unlockExclusive();
+                        goto restart;
+                    }
+
+                    if (parent) {
+                        parent->lockShared();
+                    }
+
+                    parent = inner;
+
+                    node = inner->children[inner->lowerBound(k)];
+                    node->lockShared();
+                    //inner->unlockShared();
+                }
+
+                auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+
+                // Split leaf if full
+                if (leaf->count==leaf->maxEntries) {
+                    // Lock
+                    if (parent) {
+                        needRestart = parent->upgradeToExclusive();
+                        if (needRestart) {
+                            leaf->unLockShared();
+                            goto restart;
+                        } 
+                    }
+                    needRestart = leaf->upgradeToExclusive();
+                    if (needRestart) {
+                        if (parent) parent->unlockExclusive();
+                        goto restart;
+                    }
+                    if (!parent && (leaf != root)) { // there's a new parent
+                        leaf->unlockExclusive();
+                        goto restart;
+                    }
+                    // Split
+                    Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
+                    if (parent)
+                        parent->insert(sep, newLeaf);
+                    else
+                        makeRoot(sep, leaf, newLeaf);
+                    // Unlock and restart
+                    leaf->unlockExclusive();
+                    if (parent)
+                        parent->unlockExclusive();
+                    goto restart;
+                } else {
+                    // only lock leaf node
+                    needRestart = leaf->upgradeToExlusive();
+                    if (needRestart){
+                        if(parent){
+                            parent->unLockShared();
+                        }
+                        goto restart;
+                    } 
+                    if (parent) {
+                        parent->unLockShared();
+                    }
+                    leaf->insert(k, v);
+                    node->unlockExclusive();
+                    return; // success
+                }
             }
 
             bool lookup(Key k, Value& result) {

@@ -28,21 +28,15 @@ namespace btreertm{
         } 
 
         void unlockExclusive() {
-            if(version != -1) { 
-                nodeLatch.unlock();
-            }
+            nodeLatch.unlock();
         }
 
         void lockShared() {
-            if(version != -1) { 
-                nodeLatch.lock_shared();
-            }
+            nodeLatch.lock_shared();
         }
 
         void unLockShared() {
-            if(version != -1) { 
-                nodeLatch.unlock_shared();
-            }
+            nodeLatch.unlock_shared();
         }
 
         // Returns true if fails needs restart, returns false otherwise. 
@@ -273,16 +267,14 @@ namespace btreertm{
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
+                    if(node->nodeLatch.try_lock_shared()) {
+                        node->nodeLatch.unlock_shared();
+                    }
 
                     //Touch parent lock data to ensure atomicity
-                    if(inner->version == -1) {
-                        _xend(); 
-                        goto restart;
-                    }
                     if(parent) {
-                        if(parent->version == -1) {
-                            _xend();
-                            goto restart;
+                        if(parent->nodeLatch.try_lock_shared()) {
+                            parent->nodeLatch.unlock_shared();
                         }
                     }
 
@@ -304,17 +296,15 @@ namespace btreertm{
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+                if(leaf->nodeLatch.try_lock_shared()) {
+                    leaf->nodeLatch.unlock_shared();
+                }
 
                 //Touch parent lock data to ensure atomicity
-                if(leaf->version == -1) {
-                    _xend();
-                    goto restart;
-                };
                 if(parent) {
-                    if(parent->version == -1) {
-                        _xend();
-                        goto restart;
-                    } 
+                    if(parent->nodeLatch.try_lock_shared()) {
+                        parent->nodeLatch.unlock_shared();
+                    }
                 }
 
                 // Split leaf if full

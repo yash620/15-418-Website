@@ -20,7 +20,7 @@ namespace btreertm{
         PageType type;
         uint16_t count;
         std::shared_mutex nodeLatch; 
-        int version = 0;
+        volatile int version = 0;
 
         void lockExclusive() {
             nodeLatch.lock();
@@ -28,18 +28,21 @@ namespace btreertm{
         } 
 
         void unlockExclusive() {
-            version; 
-            nodeLatch.unlock();
+            if(version != -1) { 
+                nodeLatch.unlock();
+            }
         }
 
         void lockShared() {
-            version;
-            nodeLatch.lock_shared();
+            if(version != -1) { 
+                nodeLatch.lock_shared();
+            }
         }
 
         void unLockShared() {
-            version;
-            nodeLatch.unlock_shared();
+            if(version != -1) { 
+                nodeLatch.unlock_shared();
+            }
         }
 
         // Returns true if fails needs restart, returns false otherwise. 
@@ -254,7 +257,7 @@ namespace btreertm{
                 int restartCount = 0;
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    //ffprintf\(stderr,stderr, "Going to latched version \n");
+                    fprintf(stderr, "Going to latched version \n");
                     insertLatched(k, v);
                     return; 
                 }
@@ -272,9 +275,15 @@ namespace btreertm{
                     auto inner = static_cast<BTreeInner<Key>*>(node);
 
                     //Touch parent lock data to ensure atomicity
-                    inner->version;
+                    if(inner->version == -1) {
+                        _xend(); 
+                        goto restart;
+                    }
                     if(parent) {
-                        parent->version;
+                        if(parent->version == -1) {
+                            _xend();
+                            goto restart;
+                        }
                     }
 
                     // Split eagerly if full
@@ -297,9 +306,15 @@ namespace btreertm{
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
 
                 //Touch parent lock data to ensure atomicity
-                leaf->version;
+                if(leaf->version == -1) {
+                    _xend();
+                    goto restart;
+                };
                 if(parent) {
-                    parent->version; 
+                    if(parent->version == -1) {
+                        _xend();
+                        goto restart;
+                    } 
                 }
 
                 // Split leaf if full

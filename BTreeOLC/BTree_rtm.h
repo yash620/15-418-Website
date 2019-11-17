@@ -9,12 +9,12 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 1
+#define MAX_TRANSACTION_RESTART 10
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
-    static const uint64_t pageSize=4*1024;
+    static const uint64_t pageSize=256;
 
     struct NodeBase {
         PageType type;
@@ -249,17 +249,19 @@ namespace btreertm{
 
             void insert(Key k, Value v) {
                 int restartCount = 0;
+                int restartPoint = -1;
         restart:
-                if(restartCount < -1) {
-                    restartCount = -1;
-                }
-                if(restartCount++ > MAX_TRANSACTION_RESTART) { 
+                uint16_t restartReason = 0;
+                fprintf(stderr, "RestartPoint: %d , restartCount: %d, reason: %x \n", restartPoint, restartCount, restartReason);
+                if(restartCount < 0) { restartCount = 0; }
+                if(restartCount++ >= MAX_TRANSACTION_RESTART) { 
                     fprintf(stderr, "Going to latched version \n");
                     insertLatched(k, v);
                     return; 
                 }
 
-                if(_xbegin() != _XBEGIN_STARTED) 
+                if((restartReason = _xbegin()) !=_XBEGIN_STARTED) 
+                    restartPoint = 1;
                     goto restart;
 
                 // Current node
@@ -291,6 +293,7 @@ namespace btreertm{
                             makeRoot(sep,inner,newInner);
                         _xend(); 
                         restartCount--;
+                        restartPoint = 2;
                         goto restart;
                     }
 
@@ -299,10 +302,12 @@ namespace btreertm{
                     node = inner->children[inner->lowerBound(k)];
                     _xend();
                     if(_xbegin() != _XBEGIN_STARTED)
+                        restartPoint = 3;
                         goto restart;
 
                     if(node != inner->children[inner->lowerBound(k)]) 
                         restartCount--;
+                        restartPoint = 4;
                         goto restart;
                 }
 
@@ -328,6 +333,7 @@ namespace btreertm{
                         makeRoot(sep, leaf, newLeaf);
                     _xend();
                     restartCount--;
+                    restartPoint = 5;
                     goto restart;
                 } else {
                     // only lock leaf node

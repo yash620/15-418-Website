@@ -331,9 +331,11 @@ namespace btreertm{
                 // fprintf(stderr,"Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
                 // Current node
                 NodeBase* node = root;
-                node->lockShared();
+                //node->lockShared();
+                node->lockExclusive();
                 if (node != root) {
-                    node->unLockShared(); 
+                    //node->unLockShared(); 
+                    node->unlockExclusive();
                     //fprintf(stderr, "Restart at loc %d \n", 1);
                     goto restart;
                 }
@@ -347,21 +349,21 @@ namespace btreertm{
                     // Split eagerly if full
                     if (inner->isFull()) {
                         // Lock
-                        if (parent) {
-                            needRestart = parent->upgradeToExclusive();
-                            if (needRestart){ 
-                                inner->unLockShared();
-                                //fprintf(stderr, "Restart at loc %d \n", 2);
-                                goto restart;
-                            }
-                        }
-                        needRestart = inner->upgradeToExclusive();
-                        if (needRestart) {
-                            if (parent)
-                                parent->unlockExclusive();
-                             //fprintf(stderr, "Restart at loc %d \n", 3);
-                            goto restart;
-                        }
+                        //if (parent) {
+                        //    needRestart = parent->upgradeToExclusive();
+                        //    if (needRestart){ 
+                        //        inner->unLockShared();
+                        //        //fprintf(stderr, "Restart at loc %d \n", 2);
+                        //        goto restart;
+                        //    }
+                        //}
+                        //needRestart = inner->upgradeToExclusive();
+                        //if (needRestart) {
+                        //    if (parent)
+                        //        parent->unlockExclusive();
+                        //     //fprintf(stderr, "Restart at loc %d \n", 3);
+                        //    goto restart;
+                        //}
                         if (!parent && (node != root)) { // there's a new parent
                             inner->unlockExclusive();
                             goto restart;
@@ -381,13 +383,15 @@ namespace btreertm{
                     }
 
                     if (parent) {
-                        parent->lockShared();
+                        //parent->lockShared();
+                        parent->unlockExclusive();
                     }
 
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
-                    node->lockShared();
+                    //node->lockShared();
+                    node->lockExclusive();
                     //inner->unlockShared();
                 }
 
@@ -396,20 +400,20 @@ namespace btreertm{
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Lock
-                    if (parent) {
-                        needRestart = parent->upgradeToExclusive();
-                        if (needRestart) {
-                            leaf->unLockShared();
-                             //fprintf(stderr, "Restart at loc %d \n", 5);
-                            goto restart;
-                        } 
-                    }
-                    needRestart = leaf->upgradeToExclusive();
-                    if (needRestart) {
-                        if (parent) { parent->unlockExclusive(); }
-                        //fprintf(stderr, "Restart at loc %d \n", 5);
-                        goto restart;
-                    }
+                //    if (parent) {
+                //        needRestart = parent->upgradeToExclusive();
+                //        if (needRestart) {
+                //            leaf->unLockShared();
+                //             //fprintf(stderr, "Restart at loc %d \n", 5);
+                //            goto restart;
+                //        } 
+                //    }
+                //    needRestart = leaf->upgradeToExclusive();
+                //    if (needRestart) {
+                //        if (parent) { parent->unlockExclusive(); }
+                //        //fprintf(stderr, "Restart at loc %d \n", 5);
+                //        goto restart;
+                //    }
                     if (!parent && (leaf != root)) { // there's a new parent
                         leaf->unlockExclusive();
                          //fprintf(stderr, "Restart at loc %d \n", 6);
@@ -430,16 +434,17 @@ namespace btreertm{
                     goto restart;
                 } else {
                     // only lock leaf node
-                    needRestart = leaf->upgradeToExclusive();
-                    if (needRestart){
-                        if(parent){
-                            parent->unLockShared();
-                        } 
-                        // fprintf(stderr, "Restart at loc %d \n", 8);
-                        goto restart;
-                    } 
+                //    needRestart = leaf->upgradeToExclusive();
+                //    if (needRestart){
+                //        if(parent){
+                //            parent->unLockShared();
+                //        } 
+                //        // fprintf(stderr, "Restart at loc %d \n", 8);
+                //        goto restart;
+                //    } 
                     if (parent) {
-                        parent->unLockShared();
+                //      parent->unLockShared();
+                        parent->unlockExclusive();  
                     }
                     leaf->insert(k, v);
                     leaf->unlockExclusive();

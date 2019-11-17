@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART -1
+#define MAX_TRANSACTION_RESTART 1
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -249,14 +249,18 @@ namespace btreertm{
 
             void insert(Key k, Value v) {
                 int restartCount = 0;
+                int restartPoint = -1;
         restart:
-                if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    //fprintf(stderr, "Going to latched version \n");
+                fprintf(stderr, "RestartPoint: %d , restartCount: %d \n", restartPoint, restartCount);
+                if(restartCount < 0) { restartCount = 0; }
+                if(restartCount++ >= MAX_TRANSACTION_RESTART) { 
+                    fprintf(stderr, "Going to latched version \n");
                     insertLatched(k, v);
                     return; 
                 }
 
                 if(_xbegin() != _XBEGIN_STARTED) 
+                    restartPoint = 1;
                     goto restart;
 
                 // Current node
@@ -287,6 +291,8 @@ namespace btreertm{
                         else
                             makeRoot(sep,inner,newInner);
                         _xend(); 
+                        restartCount--;
+                        restartPoint = 2;
                         goto restart;
                     }
 
@@ -316,6 +322,8 @@ namespace btreertm{
                     else
                         makeRoot(sep, leaf, newLeaf);
                     _xend();
+                    restartCount--;
+                    restartPoint = 3;
                     goto restart;
                 } else {
                     // only lock leaf node

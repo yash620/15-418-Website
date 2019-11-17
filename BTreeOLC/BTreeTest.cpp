@@ -28,7 +28,7 @@ void generateRandomValues(
 
         keys.push_back(randKey);
         values.push_back(rand() % 30000);
-        //fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
+        fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
     }
 }
 
@@ -42,7 +42,7 @@ void indexInsert(
     std::vector<int64_t>& values
 ) {
     for(auto i = startValue; i < endValue; i++){
-        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
+        fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
 }
@@ -174,23 +174,22 @@ int main() {
     // fprintf(stderr,"Testing MultiThreaded idx_rtm");
     // testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
 
-    fprintf(stdout, "Benchmarking idx_olc \n");
-    multiInsertThreadedBenchmark(idx_olc, 5, 30000); 
+    // fprintf(stdout, "Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, 5, 30000); 
 
-    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
-    singleThreadedInsertBenchmark(idx_olc, 30000); 
+    // fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    // singleThreadedInsertBenchmark(idx_olc, 30000); 
 
-    fprintf(stdout, "Benchmarking idx_rtm \n");
-    multiInsertThreadedBenchmark(idx_rtm, 40, 30000);
+    // fprintf(stdout, "Benchmarking idx_rtm \n");
+    // multiInsertThreadedBenchmark(idx_rtm, 40, 30000);
 
-    /*
-    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
-    singleThreadedInsertBenchmark(idx_olc, 30000); 
+
+    // fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    // singleThreadedInsertBenchmark(idx_olc, 30000); 
 
     fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
     singleThreadedInsertBenchmark(idx_rtm, 30000); 
 
-    fprintf(stdout, "Benchmarking idx_single single threaded \n");
-    singleThreadedInsertBenchmark(idx_single, 30000); 
-    */
+    // fprintf(stdout, "Benchmarking idx_single single threaded \n");
+    // singleThreadedInsertBenchmark(idx_single, 30000); 
 }

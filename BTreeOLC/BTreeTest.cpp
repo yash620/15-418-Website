@@ -174,12 +174,16 @@ int main() {
     // fprintf(stderr,"Testing MultiThreaded idx_rtm");
     // testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
 
-    // fprintf(stdout, "Benchmarking idx_rtm \n");
-    // multiInsertThreadedBenchmark(idx_rtm, 40, 30000);
+    fprintf(stdout, "Benchmarking idx_olc \n");
+    multiInsertThreadedBenchmark(idx_olc, 5, 30000); 
 
-    // fprintf(stdout, "Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, 40, 30000); 
+    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    singleThreadedInsertBenchmark(idx_olc, 30000); 
 
+    fprintf(stdout, "Benchmarking idx_rtm \n");
+    multiInsertThreadedBenchmark(idx_rtm, 40, 30000);
+
+    /*
     fprintf(stdout, "Benchmarking idx_olc single threaded \n");
     singleThreadedInsertBenchmark(idx_olc, 30000); 
 
@@ -188,4 +192,5 @@ int main() {
 
     fprintf(stdout, "Benchmarking idx_single single threaded \n");
     singleThreadedInsertBenchmark(idx_single, 30000); 
+    */
 }

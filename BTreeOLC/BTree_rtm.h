@@ -381,7 +381,7 @@ namespace btreertm{
                     }
 
                     if (parent) {
-                        parent->lockShared();
+                        parent->unLockShared();
                     }
 
                     parent = inner;

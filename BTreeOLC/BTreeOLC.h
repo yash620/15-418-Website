@@ -236,6 +236,10 @@ namespace btreeolc {
                 root = new BTreeLeaf<Key,Value>();
             }
 
+            void clear() {
+                root = new BTreeLeaf<Key,Value>();
+            }
+
             bool checkTree() {
                 int height = checkTreeRecursive(root);
                 std::cout << height << std::endl;

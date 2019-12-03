@@ -98,6 +98,8 @@ void testTreeSingleThreaded(Index& idx) {
         }
         assert(result == values[i]);
     } 
+
+    idx.clear();
 }
 
 template <class Index>
@@ -134,6 +136,8 @@ void testMultiThreaded(Index &idx, int numThreads) {
         }
         assert(result == values[i]);
     } 
+
+    idx.clear();
 }
 
 /**
@@ -169,6 +173,7 @@ double multiInsertThreadedBenchmark(
     double elapsed = t.elapsed(); 
     printf("Execution Time: %.6fms \n", elapsed);
 
+    idx.clear()
     return elapsed; 
 
 }
@@ -190,6 +195,7 @@ double singleThreadedInsertBenchmark(
     double elapsed = t.elapsed(); 
     printf("Execution Time: %.6fms \n", elapsed);
 
+    idx.clear();
     return elapsed; 
 }
 
@@ -200,8 +206,6 @@ int main() {
 
     fprintf(stderr,"Testing Single Threaded idx_rtm \n");
     testTreeSingleThreaded(idx_rtm);
-
-    idx_rtm.clear(); 
 
     fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
     testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);

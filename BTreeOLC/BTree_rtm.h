@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 10
+#define MAX_TRANSACTION_RESTART 1
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -19,46 +19,70 @@ namespace btreertm{
     // (sizeof Key + sizeof Payload) * 31 + sizeof NodeBase
     static const uint64_t pageSize = 3968 + 72; 
 
-    struct NodeBase {
-        PageType type;
-        uint16_t count;
-        std::shared_mutex nodeLatch; 
+    struct OptLock {
+        std::atomic<uint64_t> typeVersionLockObsolete{0b100};
         volatile int has_lock = 0;
-        volatile int version = 0;
 
-        void lockExclusive() {
-            nodeLatch.lock();
-            has_lock = 1;
-            version++;
-        } 
-
-        void unlockExclusive() {
-            has_lock = 0;
-            nodeLatch.unlock();
+        bool isLocked(uint64_t version) {
+            return ((version & 0b10) == 0b10);
         }
 
-        void lockShared() {
-            nodeLatch.lock_shared();
-            has_lock = 1;
-        }
-
-        void unLockShared() {
-            has_lock = 0;
-            nodeLatch.unlock_shared();
-        }
-
-        // Returns true if fails needs restart, returns false otherwise. 
-        bool upgradeToExclusive() {
-            int currVersion = version;
-            unLockShared();
-            lockExclusive();
-            if(currVersion + 1 != version) {
-                unlockExclusive();
-                return true;
+        uint64_t readLockOrRestart(bool &needRestart) {
+            uint64_t version;
+            version = typeVersionLockObsolete.load();
+            if (isLocked(version) || isObsolete(version)) {
+                _mm_pause();
+                needRestart = true;
             }
-            return false;
+            return version;
+        }
+
+        void writeLockOrRestart(bool &needRestart) {
+            uint64_t version;
+            version = readLockOrRestart(needRestart);
+            if (needRestart) return;
+
+            upgradeToWriteLockOrRestart(version, needRestart);
+            if (!needRestart) has_lock = 1;
+        }
+
+        void upgradeToWriteLockOrRestart(uint64_t &version, bool &needRestart) {
+            if (typeVersionLockObsolete.compare_exchange_strong(version, version + 0b10)) {
+                version = version + 0b10;
+                has_lock = 1;
+            } else {
+                _mm_pause();
+                needRestart = true;
+            }
+        }
+
+        void writeUnlock() {
+            typeVersionLockObsolete.fetch_add(0b10);
+            has_lock = 0;
+        }
+
+        bool isObsolete(uint64_t version) {
+            return (version & 1) == 1;
+        }
+
+        void checkOrRestart(uint64_t startRead, bool &needRestart) const {
+            readUnlockOrRestart(startRead, needRestart);
+        }
+
+        void readUnlockOrRestart(uint64_t startRead, bool &needRestart) const {
+            needRestart = (startRead != typeVersionLockObsolete.load());
+        }
+
+        void writeUnlockObsolete() {
+            typeVersionLockObsolete.fetch_add(0b11);
         }
     };
+
+    struct NodeBase : public OptLock{
+        PageType type;
+        uint16_t count;
+    }; 
+
 
     struct BTreeLeafBase : public NodeBase {
         static const PageType typeMarker=PageType::BTreeLeaf;
@@ -368,51 +392,36 @@ namespace btreertm{
             }
 
             void insertLatched(Key k, Value v) {
-                int restartCount = 0;
-        restart:
-                //fprintf(stderr, "Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
+restart:
+                bool needRestart = false;
+
                 // Current node
                 NodeBase* node = root;
-                node->lockShared();
-                //node->lockExclusive();
-                if (node != root) {
-                    node->unLockShared(); 
-                    //node->unlockExclusive();
-                    //fprintf(stderr, "Restart at loc %d \n", 1);
-                    goto restart;
-                }
+                uint64_t versionNode = node->readLockOrRestart(needRestart);
+                if (needRestart || (node!=root)) goto restart;
 
                 // Parent of current node
                 BTreeInner<Key>* parent = nullptr;
-                bool needRestart; 
+                uint64_t versionParent;
+
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    //fprintf(stderr, "MaxEntries: %d", inner->maxEntries); 
-                    if (parent) {
-                        parent->lockShared();
-                        //parent->unlockExclusive();
-                    }
 
                     // Split eagerly if full
                     if (inner->isFull()) {
+                        // Lock
                         if (parent) {
-                           needRestart = parent->upgradeToExclusive();
-                           if (needRestart){ 
-                               inner->unLockShared();
-                               //fprintf(stderr, "Restart at loc %d \n", 2);
-                               goto restart;
-                           }
+                            parent->upgradeToWriteLockOrRestart(versionParent, needRestart);
+                            if (needRestart) goto restart;
                         }
-                        needRestart = inner->upgradeToExclusive();
+                        node->upgradeToWriteLockOrRestart(versionNode, needRestart);
                         if (needRestart) {
-                           if (parent)
-                               parent->unlockExclusive();
-                            //fprintf(stderr, "Restart at loc %d \n", 3);
-                           goto restart;
+                            if (parent)
+                                parent->writeUnlock();
+                            goto restart;
                         }
-                        //fprintf(stderr, "Split node\n");
                         if (!parent && (node != root)) { // there's a new parent
-                            inner->unlockExclusive();
+                            node->writeUnlock();
                             goto restart;
                         }
                         // Split
@@ -422,39 +431,43 @@ namespace btreertm{
                         else
                             makeRoot(sep,inner,newInner);
                         // Unlock and restart
-                        inner->unlockExclusive();
+                        node->writeUnlock();
                         if (parent)
-                            parent->unlockExclusive();
-                        //fprintf(stderr, "Restart at loc %d \n", 4);
+                            parent->writeUnlock();
                         goto restart;
                     }
 
+                    if (parent) {
+                        parent->readUnlockOrRestart(versionParent, needRestart);
+                        if (needRestart) goto restart;
+                    }
+
                     parent = inner;
+                    versionParent = versionNode;
 
                     node = inner->children[inner->lowerBound(k)];
-                    node->lockShared();
-                    //node->lockExclusive();
-                    parent->unLockShared();
+                    inner->checkOrRestart(versionNode, needRestart);
+                    if (needRestart) goto restart;
+                    versionNode = node->readLockOrRestart(needRestart);
+                    if (needRestart) goto restart;
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                //fprintf(stderr, "Inner Node MAX ENTRIES: %d\n", leaf->maxEntries);
+
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Lock
-                   if (parent) {
-                      parent->lockExclusive();
-                   }
-                   needRestart = leaf->upgradeToExclusive();
-                   if (needRestart) {
-                       if (parent) { parent->unlockExclusive(); }
-                       //fprintf(stderr, "Restart at loc %d \n", 5);
-                       goto restart;
-                   }
-                    //fprintf(stderr, "Split Leaf\n");
-                    if (!parent && (leaf != root)) { // there's a new parent
-                        leaf->unlockExclusive();
-                         //fprintf(stderr, "Restart at loc %d \n", 6);
+                    if (parent) {
+                        parent->upgradeToWriteLockOrRestart(versionParent, needRestart);
+                        if (needRestart) goto restart;
+                    }
+                    node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                    if (needRestart) {
+                        if (parent) parent->writeUnlock();
+                        goto restart;
+                    }
+                    if (!parent && (node != root)) { // there's a new parent
+                        node->writeUnlock();
                         goto restart;
                     }
                     // Split
@@ -464,20 +477,23 @@ namespace btreertm{
                     else
                         makeRoot(sep, leaf, newLeaf);
                     // Unlock and restart
-                    leaf->unlockExclusive();
-                    if (parent) {
-                        parent->unlockExclusive();
-                    }
-                    //fprintf(stderr, "Restart at loc %d \n", 7);
+                    node->writeUnlock();
+                    if (parent)
+                        parent->writeUnlock();
                     goto restart;
                 } else {
                     // only lock leaf node
-                    needRestart = leaf->upgradeToExclusive();
-                    if (needRestart){
-                        goto restart;
-                    } 
+                    node->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                    if (needRestart) goto restart;
+                    if (parent) {
+                        parent->readUnlockOrRestart(versionParent, needRestart);
+                        if (needRestart) {
+                            node->writeUnlock();
+                            goto restart;
+                        }
+                    }
                     leaf->insert(k, v);
-                    leaf->unlockExclusive();
+                    node->writeUnlock();
                     return; // success
                 }
             }

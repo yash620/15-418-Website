@@ -230,15 +230,15 @@ int main() {
     fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
     multiInsertThreadedBenchmark(idx_rtm, 40, keys, values);
 
-    // fprintf(stdout, "Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
+    fprintf(stdout, "Benchmarking idx_olc \n");
+    multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
 
-    // fprintf(stdout, "Benchmarking idx_olc single threaded \n");
-    // singleThreadedInsertBenchmark(idx_olc, keys, values); 
+    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    singleThreadedInsertBenchmark(idx_olc, keys, values); 
 
-    // fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
-    // singleThreadedInsertBenchmark(idx_rtm, keys, values); 
+    fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
+    singleThreadedInsertBenchmark(idx_rtm, keys, values); 
 
-    // fprintf(stdout, "Benchmarking idx_single single threaded \n");
-    // singleThreadedInsertBenchmark(idx_single, keys, values); 
+    fprintf(stdout, "Benchmarking idx_single single threaded \n");
+    singleThreadedInsertBenchmark(idx_single, keys, values); 
 }

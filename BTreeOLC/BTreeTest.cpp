@@ -22,13 +22,14 @@ void generateRandomValues(
     srand(time(NULL));
     for(int i = 0; i < numValues; i++) {
         int64_t randKey = rand() % 30000;
+        //int64_t randKey = i; 
         while(std::find(keys.begin(), keys.end(), randKey) != keys.end()) {
             randKey = rand() % 30000;
         }
 
         keys.push_back(randKey);
         values.push_back(rand() % 30000);
-        //fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
+        fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
     }
 }
 
@@ -180,12 +181,12 @@ int main() {
     // fprintf(stdout, "Benchmarking idx_olc \n");
     // multiInsertThreadedBenchmark(idx_olc, 40, 30000); 
 
-    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
-    singleThreadedInsertBenchmark(idx_olc, 30000); 
+    //fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    //singleThreadedInsertBenchmark(idx_olc, 30000); 
 
     fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
-    singleThreadedInsertBenchmark(idx_rtm, 30000); 
+    singleThreadedInsertBenchmark(idx_rtm, 60); 
 
-    fprintf(stdout, "Benchmarking idx_single single threaded \n");
-    singleThreadedInsertBenchmark(idx_single, 30000); 
+    //fprintf(stdout, "Benchmarking idx_single single threaded \n");
+    //singleThreadedInsertBenchmark(idx_single, 30000); 
 }

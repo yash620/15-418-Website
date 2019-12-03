@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART -1
+#define MAX_TRANSACTION_RESTART 10
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -20,22 +20,27 @@ namespace btreertm{
         PageType type;
         uint16_t count;
         std::shared_mutex nodeLatch; 
+        volatile int has_lock = 0;
         volatile int version = 0;
 
         void lockExclusive() {
             nodeLatch.lock();
+            has_lock = 1;
             version++;
         } 
 
         void unlockExclusive() {
+            has_lock = 0;
             nodeLatch.unlock();
         }
 
         void lockShared() {
             nodeLatch.lock_shared();
+            has_lock = 1;
         }
 
         void unLockShared() {
+            has_lock = 0;
             nodeLatch.unlock_shared();
         }
 
@@ -249,15 +254,20 @@ namespace btreertm{
 
             void insert(Key k, Value v) {
                 int restartCount = 0;
+                int restartReason = 156;
+                int maybehere[4] = {0};
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    //fprintf(stderr, "Going to latched version \n");
+                    fprintf(stderr, "Going to latched version, key: %ld\n", k);
+                    fprintf(stderr, "Due to %d\n", restartReason);
+                    fprintf(stderr, "Maybe heres: %d %d %d %d\n", maybehere[0], maybehere[1], maybehere[2], maybehere[3]);
                     insertLatched(k, v);
                     return; 
                 }
 
-                if(_xbegin() != _XBEGIN_STARTED) 
+                if((restartReason = _xbegin()) != _XBEGIN_STARTED) {
                     goto restart;
+                }
 
                 // Current node
                 NodeBase* node = root;
@@ -267,20 +277,21 @@ namespace btreertm{
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    if(node->nodeLatch.try_lock_shared()) {
-                        node->nodeLatch.unlock_shared();
+                    if(node->has_lock == 1) {
+                        _xabort(1);
                     }
 
                     //Touch parent lock data to ensure atomicity
                     if(parent) {
-                        if(parent->nodeLatch.try_lock_shared()) {
-                            parent->nodeLatch.unlock_shared();
+                        if(parent->has_lock == 1) {
+                            _xabort(2);
                         }
                     }
 
                     // Split eagerly if full
                     if (inner->isFull()) {
                         // Split
+                        maybehere[0] = 1;
                         Key sep; BTreeInner<Key>* newInner = inner->split(sep);
                         if (parent)
                             parent->insert(sep,newInner);
@@ -296,20 +307,23 @@ namespace btreertm{
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                if(leaf->nodeLatch.try_lock_shared()) {
-                    leaf->nodeLatch.unlock_shared();
+                if(leaf->has_lock == 1) {
+                    maybehere[1] = 1;
+                    _xabort(3);
                 }
 
-                //Touch parent lock data to ensure atomicity
+                ////Touch parent lock data to ensure atomicity
                 if(parent) {
-                    if(parent->nodeLatch.try_lock_shared()) {
-                        parent->nodeLatch.unlock_shared();
+                    if(parent->has_lock == 1) {
+                        maybehere[2] = 1;
+                        _xabort(4);
                     }
                 }
 
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Split
+                    maybehere[3] = 1;
                     Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
                     if (parent)
                         parent->insert(sep, newLeaf);

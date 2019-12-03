@@ -14,7 +14,10 @@ namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
-    static const uint64_t pageSize=4*1024;
+    //static const uint64_t pageSize=4*1024;
+    
+    // (sizeof Key + sizeof Payload) * 31 + sizeof NodeBase
+    static const uint64_t pageSize = 3968 + 72; 
 
     struct NodeBase {
         PageType type;
@@ -68,8 +71,8 @@ namespace btreertm{
                 Payload p;
             };
 
-            static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
-
+            //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
+            static const uint64_t maxEntries=31;
             Key keys[maxEntries];
             Payload payloads[maxEntries];
 
@@ -255,12 +258,10 @@ namespace btreertm{
             void insert(Key k, Value v) {
                 int restartCount = 0;
                 int restartReason = 156;
-                int maybehere[4] = {0};
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
                     fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     fprintf(stderr, "Due to %d\n", restartReason);
-                    fprintf(stderr, "Maybe heres: %d %d %d %d\n", maybehere[0], maybehere[1], maybehere[2], maybehere[3]);
                     insertLatched(k, v);
                     return; 
                 }
@@ -291,7 +292,6 @@ namespace btreertm{
                     // Split eagerly if full
                     if (inner->isFull()) {
                         // Split
-                        maybehere[0] = 1;
                         Key sep; BTreeInner<Key>* newInner = inner->split(sep);
                         if (parent)
                             parent->insert(sep,newInner);
@@ -308,14 +308,12 @@ namespace btreertm{
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
                 if(leaf->has_lock == 1) {
-                    maybehere[1] = 1;
                     _xabort(3);
                 }
 
                 ////Touch parent lock data to ensure atomicity
                 if(parent) {
                     if(parent->has_lock == 1) {
-                        maybehere[2] = 1;
                         _xabort(4);
                     }
                 }
@@ -323,7 +321,6 @@ namespace btreertm{
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Split
-                    maybehere[3] = 1;
                     Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
                     if (parent)
                         parent->insert(sep, newLeaf);
@@ -342,7 +339,7 @@ namespace btreertm{
             void insertLatched(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                // fprintf(stderr,"Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
+                fprintf(stderr, "Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
                 // Current node
                 NodeBase* node = root;
                 //node->lockShared();
@@ -359,6 +356,7 @@ namespace btreertm{
                 bool needRestart; 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
+                    fprintf(stderr, "MaxEntries: %d", inner->maxEntries); 
 
                     // Split eagerly if full
                     if (inner->isFull()) {
@@ -378,6 +376,7 @@ namespace btreertm{
                         //     //fprintf(stderr, "Restart at loc %d \n", 3);
                         //    goto restart;
                         //}
+                        fprintf(stderr, "Split node\n");
                         if (!parent && (node != root)) { // there's a new parent
                             inner->unlockExclusive();
                             goto restart;
@@ -410,7 +409,7 @@ namespace btreertm{
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-
+                fprintf(stderr, "Inner Node MAX ENTRIES: %d\n", leaf->maxEntries);
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Lock
@@ -428,6 +427,7 @@ namespace btreertm{
                 //        //fprintf(stderr, "Restart at loc %d \n", 5);
                 //        goto restart;
                 //    }
+                    fprintf(stderr, "Split Leaf\n");
                     if (!parent && (leaf != root)) { // there's a new parent
                         leaf->unlockExclusive();
                          //fprintf(stderr, "Restart at loc %d \n", 6);

@@ -22,7 +22,7 @@ void generateRandomValues(
     srand(time(NULL));
     for(int i = 0; i < numValues; i++) {
         int64_t randKey = rand() % 30000;
-        //int64_t randKey = i; 
+        //int64_t randKey = numValues - i; 
         while(std::find(keys.begin(), keys.end(), randKey) != keys.end()) {
             randKey = rand() % 30000;
         }
@@ -172,8 +172,8 @@ int main() {
     //fprintf\(stderr,"Testing MultiThreaded idx_olc");
     //testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
-    // fprintf(stderr,"Testing MultiThreaded idx_rtm");
-    // testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
+    fprintf(stderr,"Testing MultiThreaded idx_rtm");
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
 
     // fprintf(stdout, "Benchmarking idx_rtm \n");
     // multiInsertThreadedBenchmark(idx_rtm, 40, 30000);

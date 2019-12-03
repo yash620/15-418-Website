@@ -73,12 +73,14 @@ namespace btreertm{
 
             //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
             static const uint64_t maxEntries=31;
+            bool isSorted;
             Key keys[maxEntries];
             Payload payloads[maxEntries];
 
             BTreeLeaf() {
                 count=0;
                 type=typeMarker;
+                isSorted = false;
             }
 
             bool isFull() { return count==maxEntries; };
@@ -110,27 +112,51 @@ namespace btreertm{
                 return (*base<k)+base-keys;
             }
 
+            static bool compareEntries(Entry a, Entry b) {
+                return a.k > b.k;
+            }
+
             void insert(Key k,Payload p) {
                 assert(count<maxEntries);
-                if (count) {
-                    unsigned pos=lowerBound(k);
-                    if ((pos<count) && (keys[pos]==k)) {
-                        // Upsert
-                        payloads[pos] = p;
-                        return;
-                    }
-                    memmove(keys+pos+1,keys+pos,sizeof(Key)*(count-pos));
-                    memmove(payloads+pos+1,payloads+pos,sizeof(Payload)*(count-pos));
-                    keys[pos]=k;
-                    payloads[pos]=p;
-                } else {
-                    keys[0]=k;
-                    payloads[0]=p;
-                }
+                //if (count) {
+                //    unsigned pos=lowerBound(k);
+                //    if ((pos<count) && (keys[pos]==k)) {
+                //        // Upsert
+                //        payloads[pos] = p;
+                //        return;
+                //    }
+                //    memmove(keys+pos+1,keys+pos,sizeof(Key)*(count-pos));
+                //    memmove(payloads+pos+1,payloads+pos,sizeof(Payload)*(count-pos));
+                //    keys[pos]=k;
+                //    payloads[pos]=p;
+                //} else {
+                //    keys[0]=k;
+                //    payloads[0]=p;
+                //}
+                keys[count] = k;
+                payloads[count] = p;
+                isSorted = false;
                 count++;
             }
 
+            void restructure() {
+               if(!isSorted) {
+                    Entry temp[count];
+                    for(int i = 0; i < count; i++) {
+                        temp[i].k = keys[i];
+                        temp[i].p = payloads[i];
+                    }
+                    std::sort(temp, temp + count, compareEntries);
+                    for(int i = 0; i < count; i++) {
+                        keys[i] = temp[i].k;
+                        payloads[i] = temp[i].p;
+                    }
+                    isSorted = true;
+                } 
+            }
+
             BTreeLeaf* split(Key& sep) {
+                restructure();   
                 BTreeLeaf* newLeaf = new BTreeLeaf();
                 newLeaf->count = count-(count/2);
                 count = count-newLeaf->count;
@@ -147,7 +173,8 @@ namespace btreertm{
 
     template<class Key>
         struct BTreeInner : public BTreeInnerBase {
-            static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(NodeBase*));
+            static const uint64_t maxEntries=31;
+            //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(NodeBase*));
             NodeBase* children[maxEntries];
             Key keys[maxEntries];
 
@@ -484,6 +511,7 @@ restart:
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+                leaf->restructure();
                 unsigned pos = leaf->lowerBound(k);
                 bool success;
                 if ((pos<leaf->count) && (leaf->keys[pos]==k)) {

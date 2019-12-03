@@ -14,8 +14,8 @@
 
 #define NUM_ELEMENTS 1000000
 #define NUM_ELEMENTS_TEST 1000 
-#define NUM_ELEMENTS_MULTI_TEST 1000
-#define NUM_ELEMENTS_MULTI 1000000
+#define NUM_ELEMENTS_MULTI_TEST 1'000'000
+#define NUM_ELEMENTS_MULTI 10'000'000
 
 void generateUniformRandomValues(
     int numValues, 
@@ -227,11 +227,15 @@ int main() {
 
     generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
 
-    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
-    multiInsertThreadedBenchmark(idx_rtm, 40, keys, values);
+    fprintf(stdout, "Benchmarking idx_olc \n");
+    multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
+    fprintf(stdout, "Done Warming up the caches! \n");
 
     fprintf(stdout, "Benchmarking idx_olc \n");
     multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
+
+    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
+    multiInsertThreadedBenchmark(idx_rtm, 40, keys, values);
 
     fprintf(stdout, "Benchmarking idx_olc single threaded \n");
     singleThreadedInsertBenchmark(idx_olc, keys, values); 

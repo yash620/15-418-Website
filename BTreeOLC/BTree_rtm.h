@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 1
+#define MAX_TRANSACTION_RESTART 5
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -21,7 +21,7 @@ namespace btreertm{
 
     struct OptLock {
         std::atomic<uint64_t> typeVersionLockObsolete{0b100};
-        volatile int has_lock = 0;
+        volatile std::atomic<int> has_lock = 0;
 
         bool isLocked(uint64_t version) {
             return ((version & 0b10) == 0b10);

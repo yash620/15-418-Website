@@ -113,12 +113,12 @@ namespace btreertm{
             }
 
             static bool compareEntries(Entry a, Entry b) {
-                return a.k > b.k;
+                return a.k < b.k;
             }
 
             void insert(Key k,Payload p) {
                 assert(count<maxEntries);
-                //if (count) {
+                // if (count) {
                 //    unsigned pos=lowerBound(k);
                 //    if ((pos<count) && (keys[pos]==k)) {
                 //        // Upsert
@@ -129,10 +129,10 @@ namespace btreertm{
                 //    memmove(payloads+pos+1,payloads+pos,sizeof(Payload)*(count-pos));
                 //    keys[pos]=k;
                 //    payloads[pos]=p;
-                //} else {
+                // } else {
                 //    keys[0]=k;
                 //    payloads[0]=p;
-                //}
+                // }
                 keys[count] = k;
                 payloads[count] = p;
                 isSorted = false;
@@ -244,6 +244,10 @@ namespace btreertm{
                 root = new BTreeLeaf<Key,Value>();
             }
 
+            void clear() {
+                root = new BTreeLeaf<Key, Value>();
+            }
+
             bool checkTree() {
                 int height = checkTreeRecursive(root);
                 std::cout << height << std::endl;
@@ -287,8 +291,8 @@ namespace btreertm{
                 int restartReason = 156;
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    fprintf(stderr, "Going to latched version, key: %ld\n", k);
-                    fprintf(stderr, "Due to %d\n", restartReason);
+                    //fprintf(stderr, "Going to latched version, key: %ld\n", k);
+                    //fprintf(stderr, "Due to %d\n", restartReason);
                     insertLatched(k, v);
                     return; 
                 }
@@ -366,7 +370,7 @@ namespace btreertm{
             void insertLatched(Key k, Value v) {
                 int restartCount = 0;
         restart:
-                fprintf(stderr, "Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
+                //fprintf(stderr, "Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
                 // Current node
                 NodeBase* node = root;
                 //node->lockShared();
@@ -383,7 +387,7 @@ namespace btreertm{
                 bool needRestart; 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    fprintf(stderr, "MaxEntries: %d", inner->maxEntries); 
+                    //fprintf(stderr, "MaxEntries: %d", inner->maxEntries); 
 
                     // Split eagerly if full
                     if (inner->isFull()) {
@@ -403,7 +407,7 @@ namespace btreertm{
                         //     //fprintf(stderr, "Restart at loc %d \n", 3);
                         //    goto restart;
                         //}
-                        fprintf(stderr, "Split node\n");
+                        //fprintf(stderr, "Split node\n");
                         if (!parent && (node != root)) { // there's a new parent
                             inner->unlockExclusive();
                             goto restart;
@@ -436,7 +440,7 @@ namespace btreertm{
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                fprintf(stderr, "Inner Node MAX ENTRIES: %d\n", leaf->maxEntries);
+                //fprintf(stderr, "Inner Node MAX ENTRIES: %d\n", leaf->maxEntries);
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Lock
@@ -454,7 +458,7 @@ namespace btreertm{
                 //        //fprintf(stderr, "Restart at loc %d \n", 5);
                 //        goto restart;
                 //    }
-                    fprintf(stderr, "Split Leaf\n");
+                    //fprintf(stderr, "Split Leaf\n");
                     if (!parent && (leaf != root)) { // there's a new parent
                         leaf->unlockExclusive();
                          //fprintf(stderr, "Restart at loc %d \n", 6);

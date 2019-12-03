@@ -12,8 +12,9 @@
 #include <thread>
 #include <random>
 
-#define NUM_ELEMENTS 500
-#define NUM_ELEMENTS_MULTI_TEST 30000
+#define NUM_ELEMENTS 1000000
+#define NUM_ELEMENTS_TEST 1000 
+#define NUM_ELEMENTS_MULTI_TEST 1000
 #define NUM_ELEMENTS_MULTI 1000000
 
 void generateUniformRandomValues(
@@ -21,7 +22,7 @@ void generateUniformRandomValues(
     std::vector<int64_t>& keys, 
     std::vector<int64_t>& values
 ) {
-    fprintf(stderr, "Generating Random Numbers");
+    fprintf(stderr, "Generating Random Numbers \n");
     srand(time(NULL));
     std::random_device rd;
     std::default_random_engine eng {rd()};
@@ -41,7 +42,7 @@ void generateUniformRandomValues(
         }
         // fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
     }
-    fprintf(stderr, "Done generating random numbers");
+    fprintf(stderr, "Done generating random numbers \n");
 }
 
 void generateRandomValues(
@@ -49,7 +50,7 @@ void generateRandomValues(
     std::vector<int64_t>& keys,
     std::vector<int64_t>& values
 ) {
-    fprintf(stderr, "Generating Random Numbers");
+    fprintf(stderr, "Generating Random Numbers \n");
     std::random_device rd;
     std::default_random_engine eng {rd()};
     std::uniform_int_distribution<int64_t> dist(0, numValues * 100); 
@@ -60,7 +61,7 @@ void generateRandomValues(
     }
 
     std::shuffle(std::begin(keys), std::end(keys), eng);
-    fprintf(stderr, "Done generating random numbers");
+    fprintf(stderr, "Done generating random numbers \n");
 }
 
 template <class Index> 
@@ -83,7 +84,7 @@ void testTreeSingleThreaded(Index& idx) {
     std::vector<int64_t> keys;
     std::vector<int64_t> values;
 
-    generateRandomValues(NUM_ELEMENTS, keys, values);
+    generateRandomValues(NUM_ELEMENTS_TEST, keys, values);
 
     indexInsert<Index>(0, idx, 0, keys.size(), keys, values); 
 
@@ -158,6 +159,9 @@ double multiInsertThreadedBenchmark(
         }, i));
     }
     t.reset();
+    
+    int currThreadId = numThreads-1;
+    indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
     for(std::thread& t : threads) {
         t.join(); 
     }
@@ -194,8 +198,13 @@ int main() {
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
 
-    //fprintf\(stderr,"Testing Single Threaded idx_rtm");
-    //testTreeSingleThreaded(idx_rtm);
+    fprintf(stderr,"Testing Single Threaded idx_rtm \n");
+    testTreeSingleThreaded(idx_rtm);
+
+    idx_rtm.clear(); 
+
+    fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
 
     //fprintf\(stderr,"Testing Single Threaded idx_olc");
     //testTreeSingleThreaded(idx_olc);
@@ -213,9 +222,6 @@ int main() {
     values.reserve(NUM_ELEMENTS_MULTI);
 
     generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
-
-    fprintf(stderr,"Testing MultiThreaded idx_rtm");
-    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
 
     fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
     multiInsertThreadedBenchmark(idx_rtm, 40, keys, values);

@@ -373,11 +373,11 @@ namespace btreertm{
                 //fprintf(stderr, "Key: %lld, Value: %lld, On latched restart count %d \n", k, v, restartCount++);
                 // Current node
                 NodeBase* node = root;
-                //node->lockShared();
-                node->lockExclusive();
+                node->lockShared();
+                //node->lockExclusive();
                 if (node != root) {
-                    //node->unLockShared(); 
-                    node->unlockExclusive();
+                    node->unLockShared(); 
+                    //node->unlockExclusive();
                     //fprintf(stderr, "Restart at loc %d \n", 1);
                     goto restart;
                 }
@@ -388,25 +388,28 @@ namespace btreertm{
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
                     //fprintf(stderr, "MaxEntries: %d", inner->maxEntries); 
+                    if (parent) {
+                        parent->lockShared();
+                        //parent->unlockExclusive();
+                    }
 
                     // Split eagerly if full
                     if (inner->isFull()) {
-                        // Lock
-                        //if (parent) {
-                        //    needRestart = parent->upgradeToExclusive();
-                        //    if (needRestart){ 
-                        //        inner->unLockShared();
-                        //        //fprintf(stderr, "Restart at loc %d \n", 2);
-                        //        goto restart;
-                        //    }
-                        //}
-                        //needRestart = inner->upgradeToExclusive();
-                        //if (needRestart) {
-                        //    if (parent)
-                        //        parent->unlockExclusive();
-                        //     //fprintf(stderr, "Restart at loc %d \n", 3);
-                        //    goto restart;
-                        //}
+                        if (parent) {
+                           needRestart = parent->upgradeToExclusive();
+                           if (needRestart){ 
+                               inner->unLockShared();
+                               //fprintf(stderr, "Restart at loc %d \n", 2);
+                               goto restart;
+                           }
+                        }
+                        needRestart = inner->upgradeToExclusive();
+                        if (needRestart) {
+                           if (parent)
+                               parent->unlockExclusive();
+                            //fprintf(stderr, "Restart at loc %d \n", 3);
+                           goto restart;
+                        }
                         //fprintf(stderr, "Split node\n");
                         if (!parent && (node != root)) { // there's a new parent
                             inner->unlockExclusive();
@@ -426,17 +429,12 @@ namespace btreertm{
                         goto restart;
                     }
 
-                    if (parent) {
-                        //parent->lockShared();
-                        parent->unlockExclusive();
-                    }
-
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
-                    //node->lockShared();
-                    node->lockExclusive();
-                    //inner->unlockShared();
+                    node->lockShared();
+                    //node->lockExclusive();
+                    parent->unLockShared();
                 }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
@@ -444,20 +442,15 @@ namespace btreertm{
                 // Split leaf if full
                 if (leaf->count==leaf->maxEntries) {
                     // Lock
-                //    if (parent) {
-                //        needRestart = parent->upgradeToExclusive();
-                //        if (needRestart) {
-                //            leaf->unLockShared();
-                //             //fprintf(stderr, "Restart at loc %d \n", 5);
-                //            goto restart;
-                //        } 
-                //    }
-                //    needRestart = leaf->upgradeToExclusive();
-                //    if (needRestart) {
-                //        if (parent) { parent->unlockExclusive(); }
-                //        //fprintf(stderr, "Restart at loc %d \n", 5);
-                //        goto restart;
-                //    }
+                   if (parent) {
+                      parent->lockExclusive();
+                   }
+                   needRestart = leaf->upgradeToExclusive();
+                   if (needRestart) {
+                       if (parent) { parent->unlockExclusive(); }
+                       //fprintf(stderr, "Restart at loc %d \n", 5);
+                       goto restart;
+                   }
                     //fprintf(stderr, "Split Leaf\n");
                     if (!parent && (leaf != root)) { // there's a new parent
                         leaf->unlockExclusive();
@@ -479,18 +472,10 @@ namespace btreertm{
                     goto restart;
                 } else {
                     // only lock leaf node
-                //    needRestart = leaf->upgradeToExclusive();
-                //    if (needRestart){
-                //        if(parent){
-                //            parent->unLockShared();
-                //        } 
-                //        // fprintf(stderr, "Restart at loc %d \n", 8);
-                //        goto restart;
-                //    } 
-                    if (parent) {
-                //      parent->unLockShared();
-                        parent->unlockExclusive();  
-                    }
+                    needRestart = leaf->upgradeToExclusive();
+                    if (needRestart){
+                        goto restart;
+                    } 
                     leaf->insert(k, v);
                     leaf->unlockExclusive();
                     return; // success

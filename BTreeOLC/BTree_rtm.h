@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 5
+#define MAX_TRANSACTION_RESTART 10
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -43,13 +43,13 @@ namespace btreertm{
             if (needRestart) return;
 
             upgradeToWriteLockOrRestart(version, needRestart);
-            if (!needRestart) has_lock = 1;
+            if (!needRestart) return;
         }
 
         void upgradeToWriteLockOrRestart(uint64_t &version, bool &needRestart) {
             if (typeVersionLockObsolete.compare_exchange_strong(version, version + 0b10)) {
-                version = version + 0b10;
                 has_lock = 1;
+                version = version + 0b10;
             } else {
                 _mm_pause();
                 needRestart = true;
@@ -157,6 +157,7 @@ namespace btreertm{
                 //    keys[0]=k;
                 //    payloads[0]=p;
                 // }
+
                 keys[count] = k;
                 payloads[count] = p;
                 isSorted = false;
@@ -205,6 +206,12 @@ namespace btreertm{
             BTreeInner() {
                 count=0;
                 type=typeMarker;
+            }
+
+            ~BTreeInner() {
+                for(int i = 0; i < count; i++) {
+                    delete children[i];
+                }
             }
 
             bool isFull() { return count==(maxEntries-1); };
@@ -269,6 +276,7 @@ namespace btreertm{
             }
 
             void clear() {
+                delete root;
                 root = new BTreeLeaf<Key, Value>();
             }
 

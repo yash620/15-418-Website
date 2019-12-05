@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <thread>
 #include <random>
+#include <float.h>
 
 #define NUM_ELEMENTS 1000000
 #define NUM_ELEMENTS_TEST 1000 
@@ -148,33 +149,39 @@ template <class Index>
 double multiInsertThreadedBenchmark(
     Index &idx, 
     int numThreads, 
+    int numRuns,
     std::vector<int64_t>& keys,
     std::vector<int64_t>& values 
  ) {
     std::vector<std::thread> threads; 
     int numOperations = keys.size();
 
+    double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    Timer t;
-    int i;
-    for(i = 0; i < numThreads-1; i++) {
-        threads.push_back(std::thread([&](int threadId){
-            indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
-        }, i));
-    }
-    t.reset();
-    
-    int currThreadId = numThreads-1;
-    indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
-    for(std::thread& t : threads) {
-        t.join(); 
-    }
+    for(int run = 0; run < numRuns; run++) {
+        Timer t;
+        int i;
+        for(i = 0; i < numThreads-1; i++) {
+            threads.push_back(std::thread([&](int threadId){
+                indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+            }, i));
+        }
+        t.reset();
+        
+        int currThreadId = numThreads-1;
+        indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
+        for(std::thread& t : threads) {
+            t.join(); 
+        }
 
-    double elapsed = t.elapsed(); 
-    printf("Execution Time: %.6fms \n", elapsed);
+        double elapsed = t.elapsed(); 
+        currElapsed = std::min(elapsed, currElapsed);
+        idx.clear();
+        threads.clear();
+    }
+    printf("Execution Time: %.6fms \n", currElapsed);
 
-    idx.clear();
-    return elapsed; 
+    return currElapsed; 
 
 }
 
@@ -204,11 +211,13 @@ int main() {
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
 
+    /*
     fprintf(stderr,"Testing Single Threaded idx_rtm \n");
     testTreeSingleThreaded(idx_rtm);
 
     fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
     testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
+    */
 
     //fprintf\(stderr,"Testing Single Threaded idx_olc");
     //testTreeSingleThreaded(idx_olc);
@@ -227,15 +236,15 @@ int main() {
 
     generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
 
-    fprintf(stdout, "Benchmarking idx_olc \n");
-    multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
-    fprintf(stdout, "Done Warming up the caches! \n");
+    // fprintf(stdout, "Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, 40, 2, keys, values); 
+    // fprintf(stdout, "Done Warming up the caches! \n");
 
-    fprintf(stdout, "Benchmarking idx_olc \n");
-    multiInsertThreadedBenchmark(idx_olc, 40, keys, values); 
+    // fprintf(stdout, "Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, 40, 5, keys, values); 
 
     fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
-    multiInsertThreadedBenchmark(idx_rtm, 40, keys, values);
+    multiInsertThreadedBenchmark(idx_rtm, 40, 5, keys, values);
 
     fprintf(stdout, "Benchmarking idx_olc single threaded \n");
     singleThreadedInsertBenchmark(idx_olc, keys, values); 

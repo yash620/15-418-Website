@@ -15,7 +15,7 @@
 #include <float.h>
 
 #define NUM_ELEMENTS 1000000
-#define NUM_ELEMENTS_TEST 1'000'000 
+#define NUM_ELEMENTS_TEST 1'000 
 #define NUM_ELEMENTS_MULTI_TEST 1'000'000
 #define NUM_ELEMENTS_MULTI 10'000'000
 #define MULTI_NUM_THREADS 40
@@ -111,7 +111,7 @@ void executeWorkloadAssert(
     Index &idx,
     std::vector<workload::Operation>& ops
 ) {
-    for(const workload::Operation& op : ops) {
+    for(workload::Operation& op : ops) {
         if(op.type == workload::OpType::Insert) {
             idx.insert(op.key, op.value);
         } else {
@@ -214,9 +214,12 @@ void testMixedTreeMultiThreaded(Index& idx, int numThreads) {
                                                                                     numThreads);
     std::vector<std::thread> threads;
     for(int i = 0; i < numThreads; i++) {
-        threads.push_back(std::thread([&](){
-            executeWorkloadAssert(idx, ops[i]);
-        }));
+        threads.push_back(std::thread([&](int threadId){
+            executeWorkloadAssert(idx, ops[threadId]);
+        }, i));
+    }
+    for(std::thread& t : threads) {
+        t.join(); 
     }
     idx.clear();
 }
@@ -349,20 +352,28 @@ int main(int argc, char *argv[]) {
         numThreads = strtol(argv[1], &temp, 10);
     }
 
-    // fprintf(stderr,"Testing Single Threaded idx_rtm \n");
-    // testTreeSingleThreaded(idx_rtm);
 
-    // fprintf(stderr,"Testing Single Threaded Mixed idx_rtm \n");
-    // testMixedTreeSingleThreaded(idx_rtm);
-
-    // fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
-    // testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
+    // OLC tests
+    fprintf(stderr,"Testing Single Threaded Mixed idx_olc \n");
+    testMixedTreeSingleThreaded(idx_olc);
 
     fprintf(stderr,"Testing MultiThreaded Mixed idx_olc \n");
-    testMixedTreeMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 1);
+    testMixedTreeMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
-    // fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
-    // testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
+    fprintf(stderr, "---------------------------------\n");
+
+    // Rtm Tests
+    fprintf(stderr,"Testing Single Threaded idx_rtm \n");
+    testTreeSingleThreaded(idx_rtm);
+
+    fprintf(stderr,"Testing Single Threaded Mixed idx_rtm \n");
+    testMixedTreeSingleThreaded(idx_rtm);
+
+    fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
+
+    fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
+    testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
 
     //fprintf\(stderr,"Testing Single Threaded idx_olc");
     //testTreeSingleThreaded(idx_olc);
@@ -374,26 +385,26 @@ int main(int argc, char *argv[]) {
     //testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
 
-    std::vector<int64_t> keys;
-    std::vector<int64_t> values;
-    keys.reserve(NUM_ELEMENTS_MULTI);
-    values.reserve(NUM_ELEMENTS_MULTI);
+    // std::vector<int64_t> keys;
+    // std::vector<int64_t> values;
+    // keys.reserve(NUM_ELEMENTS_MULTI);
+    // values.reserve(NUM_ELEMENTS_MULTI);
 
-    generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
-    fprintf(stdout, "Running in %d threads \n", numThreads);
+    // generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
+    // fprintf(stdout, "Running in %d threads \n", numThreads);
 
-    fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
-    multiInsertThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
-    fprintf(stdout, "Done Warming up the caches! \n");
-    fprintf(stdout, "------------------------------ \n");
+    // fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
+    // fprintf(stdout, "Done Warming up the caches! \n");
+    // fprintf(stdout, "------------------------------ \n");
 
-    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
-    multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
-    fprintf(stdout, "------------------------------ \n");
+    // fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
+    // multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
+    // fprintf(stdout, "------------------------------ \n");
 
-    fprintf(stdout, "Benchmarking idx_olc \n");
-    multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
-    fprintf(stdout, "------------------------------ \n");
+    // fprintf(stdout, "Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
+    // fprintf(stdout, "------------------------------ \n");
 
     //fprintf(stdout, "Benchmarking idx_olc single threaded \n");
     //singleThreadedInsertBenchmark(idx_olc, keys, values); 

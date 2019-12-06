@@ -32,7 +32,7 @@ struct WorkloadGenerator {
             std::uniform_int_distribution<int64_t> dist(keysStartValue, keysStartValue + numValues * 100); 
 
             for(int64_t i = 0; i < numValues; i++) {
-                keys.push_back(i);
+                keys.push_back(i + keysStartValue);
                 values.push_back(dist(eng));
             }
 
@@ -49,7 +49,6 @@ struct WorkloadGenerator {
             std::vector<Operation> operations; 
             std::vector<int64_t> keys;
             std::vector<int64_t> values;
-
             generateRandomValues(numOperations, keys, values, keysStartValue);
             srand(time(NULL));
 

@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 10
+#define MAX_TRANSACTION_RESTART 8
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -96,7 +96,7 @@ namespace btreertm{
             };
 
             //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
-            static const uint64_t maxEntries=31;
+            static const uint64_t maxEntries=600;
             bool isSorted;
             Key keys[maxEntries];
             Payload payloads[maxEntries];
@@ -140,7 +140,10 @@ namespace btreertm{
                 return a.k < b.k;
             }
 
-            void insert(Key k,Payload p) {
+            bool insert(Key k,Payload p) {
+                if(count >= maxEntries) {
+                    return false; 
+                }
                 assert(count<maxEntries);
                 // if (count) {
                 //    unsigned pos=lowerBound(k);
@@ -162,6 +165,7 @@ namespace btreertm{
                 payloads[count] = p;
                 isSorted = false;
                 count++;
+                return true;
             }
 
             void restructure() {
@@ -369,20 +373,20 @@ namespace btreertm{
                     node = inner->children[inner->lowerBound(k)];
                 }
 
-                auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                if(leaf->has_lock == 1) {
-                    _xabort(3);
-                }
-
-                ////Touch parent lock data to ensure atomicity
+                //Touch parent lock data to ensure atomicity
                 if(parent) {
                     if(parent->has_lock == 1) {
                         _xabort(4);
                     }
                 }
 
+                auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+                if(leaf->has_lock == 1) {
+                    _xabort(3);
+                }
+
                 // Split leaf if full
-                if (leaf->count==leaf->maxEntries) {
+                if (leaf->count>=leaf->maxEntries) {
                     // Split
                     Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
                     if (parent)
@@ -393,7 +397,9 @@ namespace btreertm{
                     goto restart;
                 } else {
                     // only lock leaf node
-                    leaf->insert(k, v);
+                    if(!leaf->insert(k, v)) {
+                        _xabort(5);
+                    }
                     // success
                 }
                 _xend();
@@ -463,7 +469,7 @@ restart:
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
 
                 // Split leaf if full
-                if (leaf->count==leaf->maxEntries) {
+                if (leaf->count>=leaf->maxEntries) {
                     // Lock
                     if (parent) {
                         parent->upgradeToWriteLockOrRestart(versionParent, needRestart);
@@ -507,9 +513,15 @@ restart:
             }
 
             bool lookup(Key k, Value& result) {
+                int restartCount = 0;
 restart:
-                if(_xbegin() != _XBEGIN_STARTED)
+                if(restartCount++ > MAX_TRANSACTION_RESTART) {
+                    lookupLatched(k, result);
+                }
+
+                if(_xbegin() != _XBEGIN_STARTED) {
                     goto restart;
+                }
                 NodeBase* node = root;
 
                 // Parent of current node
@@ -517,13 +529,19 @@ restart:
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-
+                    if(inner->has_lock == 1) {
+                        _xabort(1);
+                    }
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+                if(leaf->has_lock == 1){
+                    _xabort(1);
+                }
+                assert(leaf->count <= leaf->maxEntries);
                 leaf->restructure();
                 unsigned pos = leaf->lowerBound(k);
                 bool success;
@@ -533,6 +551,70 @@ restart:
                 }
                 
                 _xend();
+                return success;
+            }
+
+
+            bool lookupLatched(Key k, Value& result) {
+restart:
+                NodeBase* node = root;
+                bool needRestart = false;
+                uint64_t versionNode = node->readLockOrRestart(needRestart);
+                if (needRestart || (node!=root)) goto restart;
+
+                // Parent of current node
+                BTreeInner<Key>* parent = nullptr;
+                uint64_t versionParent;
+
+                while (node->type==PageType::BTreeInner) {
+                    auto inner = static_cast<BTreeInner<Key>*>(node);
+
+                    if (parent) {
+                        parent->readUnlockOrRestart(versionParent, needRestart);
+                        if (needRestart) goto restart;
+                    }
+
+                    parent = inner;
+                    versionParent = versionNode;
+
+                    node = inner->children[inner->lowerBound(k)];
+                    inner->checkOrRestart(versionNode, needRestart);
+                    if (needRestart) goto restart;
+                    versionNode = node->readLockOrRestart(needRestart);
+                    if (needRestart) goto restart;
+                }
+
+                BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
+                bool restructured = false;
+                if(!leaf->isSorted) {
+                    leaf->upgradeToWriteLockOrRestart(versionNode, needRestart);
+                    if(needRestart) {
+                            goto restart;
+                    }
+                    leaf->restructure();
+                    restructured = true;
+                }
+                unsigned pos = leaf->lowerBound(k);
+                bool success;
+                if ((pos<leaf->count) && (leaf->keys[pos]==k)) {
+                    success = true;
+                    result = leaf->payloads[pos];
+                }
+                if (parent) {
+                    parent->readUnlockOrRestart(versionParent, needRestart);
+                    if (needRestart){
+                        if(restructured) {
+                            leaf->writeUnlock();
+                        }
+                        goto restart;
+                    } 
+                }
+                if(restructured) {
+                    leaf->writeUnlock();
+                } else {
+                    leaf->readUnlockOrRestart(versionNode, needRestart);
+                    if (needRestart) goto restart;
+                }
                 return success;
             }
 

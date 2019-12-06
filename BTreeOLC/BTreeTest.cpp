@@ -17,6 +17,7 @@
 #define NUM_ELEMENTS_TEST 1000 
 #define NUM_ELEMENTS_MULTI_TEST 1'000'000
 #define NUM_ELEMENTS_MULTI 10'000'000
+#define MULTI_NUM_THREADS 40
 
 void generateUniformRandomValues(
     int numValues, 
@@ -81,6 +82,43 @@ void indexInsert(
 }
 
 template <class Index> 
+void indexLookupAssert(
+    int threadId,
+    Index &idx,
+    int startValue,
+    int endValue,
+    std::vector<int64_t>& keys,
+    std::vector<int64_t>& values
+) {
+   for(auto i = startValue; i < endValue; i++){
+        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
+        int64_t result;
+        idx.lookup(keys[i], result);
+        if(result != values[i]) {
+            fprintf(stderr,"Looking up: %lld \n", keys[i]);
+            fprintf(stderr,"Result %lld, value %lld \n", result, values[i]);
+        }
+        assert(result == values[i]);
+   } 
+}
+
+template <class Index> 
+void indexLookup(
+    int threadId,
+    Index &idx,
+    int startValue,
+    int endValue,
+    std::vector<int64_t>& keys,
+    std::vector<int64_t>& values
+) {
+   for(auto i = startValue; i < endValue; i++){
+        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
+        int64_t result;
+        idx.lookup(keys[i], result);
+   } 
+}
+
+template <class Index> 
 void testTreeSingleThreaded(Index& idx) {
     std::vector<int64_t> keys;
     std::vector<int64_t> values;
@@ -90,16 +128,7 @@ void testTreeSingleThreaded(Index& idx) {
     indexInsert<Index>(0, idx, 0, keys.size(), keys, values); 
 
     assert(idx.checkTree());
-    for(int i = 0; i < keys.size(); i++){
-        int64_t result;
-        assert(idx.lookup(keys[i], result));
-        if(result != values[i]) {
-            fprintf(stderr,"Looking up: %lld \n", keys[i]);
-            fprintf(stderr,"Result %lld, value %lld \n", result, values[i]);
-        }
-        assert(result == values[i]);
-    } 
-
+    indexLookupAssert<Index>(0, idx, 0, keys.size(), keys, values);
     idx.clear();
 }
 
@@ -127,16 +156,24 @@ void testMultiThreaded(Index &idx, int numThreads) {
         t.join(); 
     }
 
+    fprintf(stderr, "Done Inserting for Test \n");
+
+    threads.clear();
     assert(idx.checkTree());
-    for(int i = 0; i < keys.size(); i++){
-        int64_t result;
-        assert(idx.lookup(keys[i], result));
-        if(result != values[i]) {
-            fprintf(stderr,"Looking up: %lld \n", keys[i]);
-            fprintf(stderr,"Result %lld, value %lld \n", result, values[i]);
-        }
-        assert(result == values[i]);
-    } 
+
+    for(i = 0; i < numThreads-1; i++) {
+        threads.push_back(std::thread([&](int threadId){
+            indexLookupAssert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+        }, i));
+    }
+
+    threads.push_back(std::thread([&](int threadId){
+        indexLookupAssert<Index>(threadId, idx, threadId * numValuesPerThreads, keys.size(), keys, values);
+    }, i));
+
+    for(std::thread& t : threads) {
+        t.join(); 
+    }
 
     idx.clear();
 }
@@ -176,7 +213,53 @@ double multiInsertThreadedBenchmark(
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
+
         idx.clear();
+        threads.clear();
+    }
+    printf("Execution Time: %.6fms \n", currElapsed);
+
+    return currElapsed; 
+
+}
+
+/**
+ * Benchmarks inserting multithreaded
+ * returns the elapsed time
+ */
+template <class Index>
+double multiLookupThreadedBenchmark(
+    Index &idx, 
+    int numThreads, 
+    int numRuns,
+    std::vector<int64_t>& keys,
+    std::vector<int64_t>& values 
+ ) {
+    std::vector<std::thread> threads; 
+    int numOperations = keys.size();
+
+    double currElapsed = DBL_MAX;
+    int numValuesPerThreads = numOperations/numThreads; 
+    indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+    for(int run = 0; run < numRuns; run++) {
+        Timer t;
+        int i;
+        for(i = 0; i < numThreads-1; i++) {
+            threads.push_back(std::thread([&](int threadId){
+                indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+            }, i));
+        }
+        t.reset();
+        
+        int currThreadId = numThreads-1;
+        indexLookup<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
+        for(std::thread& t : threads) {
+            t.join(); 
+        }
+
+        double elapsed = t.elapsed(); 
+        currElapsed = std::min(elapsed, currElapsed);
+
         threads.clear();
     }
     printf("Execution Time: %.6fms \n", currElapsed);
@@ -189,35 +272,43 @@ template <class Index>
 double singleThreadedInsertBenchmark(
     Index &idx, 
     std::vector<int64_t>& keys,
-    std::vector<int64_t>& values  
+    std::vector<int64_t>& values,
+    int numRuns  
  ) {
     std::vector<std::thread> threads; 
 
     int numOperations = keys.size();
-    printf("Done generating values starting benchmark \n");
+    double currElapsed = DBL_MAX;
     Timer t; 
-    t.reset();
-    indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+    for(int i = 0; i < numRuns; i++) {
+        t.reset();
+        indexInsert<Index>(0, idx, 0, numOperations, keys, values);
 
-    double elapsed = t.elapsed(); 
-    printf("Execution Time: %.6fms \n", elapsed);
+        double elapsed = t.elapsed(); 
+        currElapsed = std::min(elapsed, currElapsed);
+    }
+    printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
-    return elapsed; 
+    return currElapsed; 
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     btreertm::BTree<int64_t, int64_t> idx_rtm;
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
 
-    /*
+    int numThreads = MULTI_NUM_THREADS; 
+    char *temp;
+    if(argc > 1) {
+        numThreads = strtol(argv[1], &temp, 10);
+    }
+
     fprintf(stderr,"Testing Single Threaded idx_rtm \n");
     testTreeSingleThreaded(idx_rtm);
 
     fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
-    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 2);
-    */
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
 
     //fprintf\(stderr,"Testing Single Threaded idx_olc");
     //testTreeSingleThreaded(idx_olc);
@@ -229,29 +320,34 @@ int main() {
     //testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
 
-    std::vector<int64_t> keys;
-    std::vector<int64_t> values;
-    keys.reserve(NUM_ELEMENTS_MULTI);
-    values.reserve(NUM_ELEMENTS_MULTI);
+    // std::vector<int64_t> keys;
+    // std::vector<int64_t> values;
+    // keys.reserve(NUM_ELEMENTS_MULTI);
+    // values.reserve(NUM_ELEMENTS_MULTI);
 
-    generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
+    // generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
+    // fprintf(stdout, "Running in %d threads \n", numThreads);
 
-    // fprintf(stdout, "Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, 40, 2, keys, values); 
+    // fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    // multiInsertThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
     // fprintf(stdout, "Done Warming up the caches! \n");
+    // fprintf(stdout, "------------------------------ \n");
+
+    // fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
+    // multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
+    // fprintf(stdout, "------------------------------ \n");
 
     // fprintf(stdout, "Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, 40, 5, keys, values); 
+    // multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
+    // fprintf(stdout, "------------------------------ \n");
 
-    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
-    multiInsertThreadedBenchmark(idx_rtm, 40, 5, keys, values);
+    //fprintf(stdout, "Benchmarking idx_olc single threaded \n");
+    //singleThreadedInsertBenchmark(idx_olc, keys, values); 
 
-    fprintf(stdout, "Benchmarking idx_olc single threaded \n");
-    singleThreadedInsertBenchmark(idx_olc, keys, values); 
+    // fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
+    // singleThreadedInsertBenchmark(idx_rtm, keys, values); 
 
-    fprintf(stdout, "Benchmarking idx_rtm single threaded \n");
-    singleThreadedInsertBenchmark(idx_rtm, keys, values); 
-
-    fprintf(stdout, "Benchmarking idx_single single threaded \n");
-    singleThreadedInsertBenchmark(idx_single, keys, values); 
+    // fprintf(stdout, "Benchmarking idx_single single threaded \n");
+    // singleThreadedInsertBenchmark(idx_single, keys, values, 5); 
+    // fprintf(stdout, "------------------------------ \n");
 }

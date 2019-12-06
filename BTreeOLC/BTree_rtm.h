@@ -97,7 +97,7 @@ namespace btreertm{
             };
 
             //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
-            static const uint64_t maxEntries=600;
+            static const uint64_t maxEntries=31;
             bool isSorted;
             Key keys[maxEntries];
             Payload payloads[maxEntries];

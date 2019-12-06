@@ -320,26 +320,26 @@ int main(int argc, char *argv[]) {
     //testMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 10);
 
 
-    // std::vector<int64_t> keys;
-    // std::vector<int64_t> values;
-    // keys.reserve(NUM_ELEMENTS_MULTI);
-    // values.reserve(NUM_ELEMENTS_MULTI);
+    std::vector<int64_t> keys;
+    std::vector<int64_t> values;
+    keys.reserve(NUM_ELEMENTS_MULTI);
+    values.reserve(NUM_ELEMENTS_MULTI);
 
-    // generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
-    // fprintf(stdout, "Running in %d threads \n", numThreads);
+    generateRandomValues(NUM_ELEMENTS_MULTI, keys, values); 
+    fprintf(stdout, "Running in %d threads \n", numThreads);
 
-    // fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
-    // fprintf(stdout, "Done Warming up the caches! \n");
-    // fprintf(stdout, "------------------------------ \n");
+    fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    multiInsertThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
+    fprintf(stdout, "Done Warming up the caches! \n");
+    fprintf(stdout, "------------------------------ \n");
 
-    // fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
-    // multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
-    // fprintf(stdout, "------------------------------ \n");
+    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
+    multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
+    fprintf(stdout, "------------------------------ \n");
 
-    // fprintf(stdout, "Benchmarking idx_olc \n");
-    // multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
-    // fprintf(stdout, "------------------------------ \n");
+    fprintf(stdout, "Benchmarking idx_olc \n");
+    multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
+    fprintf(stdout, "------------------------------ \n");
 
     //fprintf(stdout, "Benchmarking idx_olc single threaded \n");
     //singleThreadedInsertBenchmark(idx_olc, keys, values); 

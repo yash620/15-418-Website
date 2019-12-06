@@ -51,6 +51,7 @@ namespace btreertm{
                 has_lock = 1;
                 version = version + 0b10;
             } else {
+                has_lock = 0;
                 _mm_pause();
                 needRestart = true;
             }
@@ -325,8 +326,9 @@ namespace btreertm{
             void insert(Key k, Value v) {
                 int restartCount = 0;
                 int restartReason = 156;
+                bool goToLatched = false;
         restart:
-                if(restartCount++ > MAX_TRANSACTION_RESTART) { 
+                if(goToLatched || restartCount++ > MAX_TRANSACTION_RESTART) { 
                     //fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     //fprintf(stderr, "Due to %d\n", restartReason);
                     insertLatched(k, v);
@@ -345,20 +347,28 @@ namespace btreertm{
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    if(node->has_lock == 1) {
+                    // if(node->has_lock == 1) {
+                    //     _xabort(1);
+                    // }
+                    if(node->isLocked(node->typeVersionLockObsolete.load()) || node->isObsolete(node->typeVersionLockObsolete.load())) {
                         _xabort(1);
                     }
 
                     //Touch parent lock data to ensure atomicity
                     if(parent) {
-                        if(parent->has_lock == 1) {
-                            _xabort(2);
+                        if(parent->isLocked(parent->typeVersionLockObsolete.load()) || parent->isObsolete(parent->typeVersionLockObsolete.load())) {
+                            _xabort(1);
                         }
+                        // if(parent->has_lock == 1) {
+                        //     _xabort(2);
+                        // }
                     }
 
                     // Split eagerly if full
                     if (inner->isFull()) {
                         // Split
+                        // goToLatched = true;
+                        // _xabort(11);
                         Key sep; BTreeInner<Key>* newInner = inner->split(sep);
                         if (parent)
                             parent->insert(sep,newInner);
@@ -374,20 +384,28 @@ namespace btreertm{
                 }
 
                 //Touch parent lock data to ensure atomicity
-                if(parent) {
-                    if(parent->has_lock == 1) {
-                        _xabort(4);
+                 if(parent) {
+                        if(parent->isLocked(parent->typeVersionLockObsolete.load()) || parent->isObsolete(parent->typeVersionLockObsolete.load())) {
+                            _xabort(4);
+                        }
+                        // if(parent->has_lock == 1) {
+                        //     _xabort(4);
+                        // }
                     }
-                }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                if(leaf->has_lock == 1) {
+                // if(leaf->has_lock == 1) {
+                //     _xabort(3);
+                // }
+                if(leaf->isLocked(leaf->typeVersionLockObsolete.load()) || leaf->isObsolete(leaf->typeVersionLockObsolete.load())) {
                     _xabort(3);
                 }
 
                 // Split leaf if full
                 if (leaf->count>=leaf->maxEntries) {
                     // Split
+                    // goToLatched = true;
+                    // _xabort(12);
                     Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
                     if (parent)
                         parent->insert(sep, newLeaf);
@@ -529,8 +547,8 @@ restart:
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    if(inner->has_lock == 1) {
-                        _xabort(1);
+                    if(inner->isLocked(inner->typeVersionLockObsolete.load()) || inner->isObsolete(inner->typeVersionLockObsolete.load())) {
+                            _xabort(4);
                     }
                     parent = inner;
 
@@ -538,8 +556,8 @@ restart:
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                if(leaf->has_lock == 1){
-                    _xabort(1);
+               if(leaf->isLocked(leaf->typeVersionLockObsolete.load()) || leaf->isObsolete(leaf->typeVersionLockObsolete.load())) {
+                        _xabort(1);
                 }
                 assert(leaf->count <= leaf->maxEntries);
                 leaf->restructure();

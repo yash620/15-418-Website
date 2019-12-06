@@ -3,6 +3,7 @@
 #include "BTree_single_threaded.h"
 #include "BTree_rtm.h"
 #include "timing.h"
+#include "WorkloadGenerator.h"
 
 #include <cassert>
 #include <vector>
@@ -14,38 +15,10 @@
 #include <float.h>
 
 #define NUM_ELEMENTS 1000000
-#define NUM_ELEMENTS_TEST 1000 
+#define NUM_ELEMENTS_TEST 1'000'000 
 #define NUM_ELEMENTS_MULTI_TEST 1'000'000
 #define NUM_ELEMENTS_MULTI 10'000'000
 #define MULTI_NUM_THREADS 40
-
-void generateUniformRandomValues(
-    int numValues, 
-    std::vector<int64_t>& keys, 
-    std::vector<int64_t>& values
-) {
-    fprintf(stderr, "Generating Random Numbers \n");
-    srand(time(NULL));
-    std::random_device rd;
-    std::default_random_engine eng {rd()};
-    std::uniform_int_distribution<int64_t> dist(0, NUM_ELEMENTS_MULTI * 100);
-
-    for(int i = 0; i < numValues; i++) {
-        int64_t randKey = dist(eng);
-        //int64_t randKey = numValues - i; 
-        while(std::find(keys.begin(), keys.end(), randKey) != keys.end()) {
-            randKey = dist(eng);
-        }
-
-        keys.push_back(randKey);
-        values.push_back(dist(eng));
-        if(i % 10000 == 0) {
-            fprintf(stderr, "Generating %d values \n", i);
-        }
-        // fprintf(stderr,"Generate Key: %lld, Value: %lld \n", keys[i], values[i]);
-    }
-    fprintf(stderr, "Done generating random numbers \n");
-}
 
 void generateRandomValues(
     int64_t numValues,
@@ -118,6 +91,44 @@ void indexLookup(
    } 
 }
 
+template <class Index>
+void executeWorkload(
+    Index &idx,
+    std::vector<workload::Operation>& ops
+) {
+    for(const workload::Operation& op : ops) {
+        if(op.type == workload::OpType::Insert) {
+            idx.insert(op.key, op.value);
+        } else {
+            int64_t result;
+            idx.lookup(op.key, result);
+        }
+    }
+}
+
+template <class Index>
+void executeWorkloadAssert(
+    Index &idx,
+    std::vector<workload::Operation>& ops
+) {
+    for(const workload::Operation& op : ops) {
+        if(op.type == workload::OpType::Insert) {
+            idx.insert(op.key, op.value);
+        } else {
+            int64_t result;
+            idx.lookup(op.key, result);
+            if(result != op.value) {
+                fprintf(stderr,"Looking up: %lld \n", op.key);
+                fprintf(stderr,"Result %lld, value %lld \n", result, op.value);
+            }
+            assert(result == op.value);
+        }
+    }
+}
+
+/**
+ * Inserts followed by lookups
+ */
 template <class Index> 
 void testTreeSingleThreaded(Index& idx) {
     std::vector<int64_t> keys;
@@ -132,6 +143,20 @@ void testTreeSingleThreaded(Index& idx) {
     idx.clear();
 }
 
+/**
+ * Interleaves inserts and lookups
+ */
+template <class Index>
+void testMixedTreeSingleThreaded(Index& idx) {
+    workload::WorkloadGenerator gen;
+    std::vector<workload::Operation> ops = gen.generateWorkload(0.5, NUM_ELEMENTS_TEST);
+    executeWorkloadAssert(idx, ops);
+    idx.clear();
+}
+
+/**
+ * Inserts followed by lookups
+ */
 template <class Index>
 void testMultiThreaded(Index &idx, int numThreads) {
     std::vector<int64_t> keys;
@@ -177,6 +202,25 @@ void testMultiThreaded(Index &idx, int numThreads) {
 
     idx.clear();
 }
+
+/**
+ * Interleaves inserts and lookups
+ */
+template <class Index>
+void testMixedTreeMultiThreaded(Index& idx, int numThreads) {
+    workload::WorkloadGenerator gen;
+    std::vector<std::vector<workload::Operation>> ops = gen.generateParallelWorkload(0.5, 
+                                                                                    NUM_ELEMENTS_MULTI_TEST,
+                                                                                    numThreads);
+    std::vector<std::thread> threads;
+    for(int i = 0; i < numThreads; i++) {
+        threads.push_back(std::thread([&](){
+            executeWorkloadAssert(idx, ops[i]);
+        }));
+    }
+    idx.clear();
+}
+
 
 /**
  * Benchmarks inserting multithreaded
@@ -264,6 +308,7 @@ double multiLookupThreadedBenchmark(
     }
     printf("Execution Time: %.6fms \n", currElapsed);
 
+    idx.clear();
     return currElapsed; 
 
 }
@@ -304,11 +349,20 @@ int main(int argc, char *argv[]) {
         numThreads = strtol(argv[1], &temp, 10);
     }
 
-    fprintf(stderr,"Testing Single Threaded idx_rtm \n");
-    testTreeSingleThreaded(idx_rtm);
+    // fprintf(stderr,"Testing Single Threaded idx_rtm \n");
+    // testTreeSingleThreaded(idx_rtm);
 
-    fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
-    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
+    // fprintf(stderr,"Testing Single Threaded Mixed idx_rtm \n");
+    // testMixedTreeSingleThreaded(idx_rtm);
+
+    // fprintf(stderr,"Testing MultiThreaded idx_rtm \n");
+    // testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
+
+    fprintf(stderr,"Testing MultiThreaded Mixed idx_olc \n");
+    testMixedTreeMultiThreaded<btreeolc::BTree<int64_t, int64_t>>(idx_olc, 1);
+
+    // fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
+    // testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, 10);
 
     //fprintf\(stderr,"Testing Single Threaded idx_olc");
     //testTreeSingleThreaded(idx_olc);

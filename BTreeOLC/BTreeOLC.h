@@ -231,6 +231,8 @@ namespace btreeolc {
     template<class Key,class Value>
         struct BTree {
             std::atomic<NodeBase*> root;
+            int insertFallbackTimes;
+            int lookupFallbackTimes;
 
             BTree() {
                 root = new BTreeLeaf<Key,Value>();

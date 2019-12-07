@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 8
+#define MAX_TRANSACTION_RESTART 6 
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -151,7 +151,7 @@ namespace btreertm{
                 //    if ((pos<count) && (keys[pos]==k)) {
                 //        // Upsert
                 //        payloads[pos] = p;
-                //        return;
+                //        return true;
                 //    }
                 //    memmove(keys+pos+1,keys+pos,sizeof(Key)*(count-pos));
                 //    memmove(payloads+pos+1,payloads+pos,sizeof(Payload)*(count-pos));
@@ -161,6 +161,8 @@ namespace btreertm{
                 //    keys[0]=k;
                 //    payloads[0]=p;
                 // }
+
+                // count++;
 
                 keys[count] = k;
                 payloads[count] = p;
@@ -275,13 +277,19 @@ namespace btreertm{
     template<class Key,class Value>
         struct BTree {
            NodeBase* root;
+           int insertFallbackTimes;
+           int lookupFallbackTimes;
 
             BTree() {
                 root = new BTreeLeaf<Key,Value>();
+                insertFallbackTimes = 0;
+                lookupFallbackTimes = 0;
             }
 
             void clear() {
                 delete root;
+                insertFallbackTimes = 0;
+                lookupFallbackTimes = 0;
                 root = new BTreeLeaf<Key, Value>();
             }
 
@@ -331,6 +339,7 @@ namespace btreertm{
                 if(goToLatched || restartCount++ > MAX_TRANSACTION_RESTART) { 
                     //fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     //fprintf(stderr, "Due to %d\n", restartReason);
+                    //insertFallbackTimes++;
                     insertLatched(k, v);
                     return; 
                 }
@@ -534,7 +543,8 @@ restart:
                 int restartCount = 0;
 restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
-                    lookupLatched(k, result);
+                    //lookupFallbackTimes++;
+                    return lookupLatched(k, result);
                 }
 
                 if(_xbegin() != _XBEGIN_STARTED) {

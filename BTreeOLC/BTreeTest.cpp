@@ -242,6 +242,7 @@ double multiInsertThreadedBenchmark(
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
+    int insertFallbackTimes;
     for(int run = 0; run < numRuns; run++) {
         Timer t;
         int i;
@@ -260,10 +261,11 @@ double multiInsertThreadedBenchmark(
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
-
+        insertFallbackTimes += idx.insertFallbackTimes;
         idx.clear();
         threads.clear();
     }
+    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbackTimes)/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     return currElapsed; 
@@ -306,9 +308,10 @@ double multiLookupThreadedBenchmark(
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
-
         threads.clear();
     }
+
+    //printf("Average Lookup Fallback Times: %d \n", idx.lookupFallbackTimes/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
@@ -325,6 +328,8 @@ double multiThreadedMixedBenchmark(
 ) {
     std::vector<std::thread> threads;
     double currElapsed = DBL_MAX;
+    double insertFallbackTimes = 0;
+    double lookupFallbackTimes = 0;
     for(int run = 0; run < numRuns; run++){
         Timer t;
         for(int i = 0; i < workloads.size(); i++) {
@@ -340,9 +345,13 @@ double multiThreadedMixedBenchmark(
         double elapsed = t.elapsed();
         currElapsed = std::min(elapsed, currElapsed);
         threads.clear();
+        lookupFallbackTimes += idx.lookupFallbackTimes;
+        insertFallbackTimes += idx.insertFallbackTimes;
         idx.clear(); 
     }
 
+    //printf("Average Insert Fallback times: %d \n", insertFallbackTimes/numRuns);
+    //printf("Average Lookup Fallback times: %d \n", lookupFallbackTimes/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
     return currElapsed;
 }
@@ -381,6 +390,31 @@ double singleThreadedInsertBenchmark(
     return currElapsed; 
 }
 
+template <class Index>
+double singleThreadedLookupBenchmark(
+    Index &idx, 
+    std::vector<int64_t>& keys,
+    std::vector<int64_t>& values,
+    int numRuns  
+ ) {
+    std::vector<std::thread> threads; 
+
+    int numOperations = keys.size();
+    double currElapsed = DBL_MAX;
+    indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+    Timer t; 
+    for(int i = 0; i < numRuns; i++) {
+        t.reset();
+        indexLookup<Index>(0, idx, 0, keys.size(), keys, values);
+        double elapsed = t.elapsed(); 
+        currElapsed = std::min(elapsed, currElapsed);
+    }
+    printf("Execution Time: %.6fms \n", currElapsed);
+
+    idx.clear();
+    return currElapsed; 
+}
+
 void runInsertBenchmarks(int numThreads, int numOperations) {
      btreertm::BTree<int64_t, int64_t> idx_rtm;
     btreeolc::BTree<int64_t, int64_t> idx_olc;
@@ -390,7 +424,7 @@ void runInsertBenchmarks(int numThreads, int numOperations) {
     keys.reserve(numOperations);
     values.reserve(numOperations);
 
-    fprintf(stdout, "Running Insert Benchmakrs: threads: %d, operations: %d \n", numThreads, numOperations);
+    fprintf(stdout, "Running Insert Benchmarks: threads: %d, operations: %d \n", numThreads, numOperations);
 
 
     generateRandomValues(numOperations, keys, values); 
@@ -402,13 +436,42 @@ void runInsertBenchmarks(int numThreads, int numOperations) {
 
     fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
     multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
-    fprintf(stdout, "------------------------------ \n");
 
     fprintf(stdout, "Benchmarking idx_olc \n");
     multiInsertThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
 
     fprintf(stdout, "Benchmarking idx_single single threaded \n");
     singleThreadedInsertBenchmark(idx_single, keys, values, 5); 
+    fprintf(stdout, "------------------------------ \n"); 
+}
+
+void runLookupBenchmarks(int numThreads, int numOperations) {
+     btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreeolc::BTree<int64_t, int64_t> idx_olc;
+    btreesinglethread::BTree<int64_t, int64_t> idx_single;
+    std::vector<int64_t> keys;
+    std::vector<int64_t> values;
+    keys.reserve(numOperations);
+    values.reserve(numOperations);
+
+    fprintf(stdout, "Running Lookup Benchmarks: threads: %d, operations: %d \n", numThreads, numOperations);
+
+
+    generateRandomValues(numOperations, keys, values); 
+    fprintf(stdout, "Running in %d threads \n", numThreads);
+
+    fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    multiLookupThreadedBenchmark(idx_olc, numThreads, 2, keys, values); 
+    fprintf(stdout, "Done Warming up the caches! \n");
+
+    fprintf(stdout, "Benchmarking Multithreaded idx_rtm \n");
+    multiLookupThreadedBenchmark(idx_rtm, numThreads, 5, keys, values);
+
+    fprintf(stdout, "Benchmarking idx_olc \n");
+    multiLookupThreadedBenchmark(idx_olc, numThreads, 5, keys, values); 
+
+    fprintf(stdout, "Benchmarking idx_single single threaded \n");
+    singleThreadedLookupBenchmark(idx_single, keys, values, 5); 
     fprintf(stdout, "------------------------------ \n"); 
 }
 
@@ -441,7 +504,7 @@ void runMixedBenchmarks(int numThreads, int numOperations, double percentInsert)
     double elapsed = t.elapsed(); 
 
     fprintf(stdout, "Execution Time: %.6fms \n", elapsed);
-    fprintf(stdout, "-------------------------------");
+    fprintf(stdout, "------------------------------- \n");
 }
 
 void runOLCTests(int numThreads) {
@@ -475,6 +538,8 @@ void runRTMTests(int numThreads) {
 
     fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
     testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, numThreads);
+
+    fprintf(stderr, "---------------------------------\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -495,6 +560,9 @@ int main(int argc, char *argv[]) {
 
     runRTMTests(10);
 
-    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, percentInsert);
+    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
+    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
+    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
     runInsertBenchmarks(numThreads, NUM_ELEMENTS_MULTI);
+    runLookupBenchmarks(numThreads, NUM_ELEMENTS_MULTI);
 }

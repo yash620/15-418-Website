@@ -415,7 +415,7 @@ double singleThreadedLookupBenchmark(
 }
 
 void runInsertBenchmarks(int numThreads, int numOperations) {
-     btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm;
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreelocked::BTree<int64_t, int64_t> idx_locked;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
@@ -449,7 +449,7 @@ void runInsertBenchmarks(int numThreads, int numOperations) {
 }
 
 void runLookupBenchmarks(int numThreads, int numOperations) {
-     btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm;
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreelocked::BTree<int64_t, int64_t> idx_locked;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;

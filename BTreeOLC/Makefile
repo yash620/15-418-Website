@@ -13,8 +13,9 @@ workload: GenerateWorkload.cpp WorkloadGenerator.h
 	$(CXX) $(CFLAGS) -DDEBUG -o GenerateWorkload.out GenerateWorkload.cpp
 
 benchmark: test 
-	for threads in 1 2 4 8 16 32 40 ; do \
-		./BTreeTest.out $$threads ; \
+	for threads in 40 1 2 4 8 16 32 ; do \
+		echo "---------------------------NEW RUN-----------------------\n"  ; \
+		./BTreeTest.out $$threads 1>> ../transaction_surrounding_call_benchmark.out ; \
 	done
 
 clean: 

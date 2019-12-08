@@ -343,7 +343,7 @@ double multiLookupThreadedBenchmark(
         printf("Retries %d: %d\n", i, lookupRetries[i].load());
     }    
     
-    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
+    //printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
 
     idx.clear();
@@ -407,8 +407,8 @@ double multiThreadedMixedBenchmark(
         printf("Retries %d: %d\n", i, lookupRetries[i].load());
     }
     
-    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
-    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
+    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
+    //printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
     return currElapsed/numRuns;
 }
@@ -722,6 +722,56 @@ void runFallBackCountsBenchmarks(int numThreads, int numOperations, double perce
     fprintf(stdout, "------------------------------- \n");
 }
 
+void runRetryCountsBenchmarks(int numThreads, int numOperations, double percentInsert) {
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
+
+    fprintf(stdout, "Running fallback counts benchmark: numThreads: %d, numOperations: %d, percentInsert: %f \n", 
+        numThreads, numOperations, percentInsert);
+    
+    if(percentInsert >= 1.0 || percentInsert <= 0.0) {
+        std::vector<int64_t> keys;
+        std::vector<int64_t> values;
+        keys.reserve(numOperations);
+        values.reserve(numOperations); 
+
+        generateRandomValues(numOperations, keys, values); 
+
+        if(percentInsert >= 1.0) {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded insert only idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "------------------------------ \n"); 
+        } else {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded lookup only idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "------------------------------ \n"); 
+        }
+
+        return;
+    }
+
+    workload::WorkloadGenerator generator;
+    std::vector<std::vector<workload::Operation>> workloads = 
+        generator.generateParallelWorkload(percentInsert, numOperations, numThreads);
+
+    fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    multiThreadedMixedBenchmark(idx_rtm, 2, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index rtm\n");
+    multiThreadedMixedBenchmark(idx_rtm, 5, workloads);
+
+    fprintf(stdout, "------------------------------- \n");
+}
+
 int main(int argc, char *argv[]) {
     int numThreads = MULTI_NUM_THREADS; 
     double percentInsert = 0.5;
@@ -737,10 +787,10 @@ int main(int argc, char *argv[]) {
     runRTMTests(10);
     runRTMWeavedTests(10);
 
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 1.0);
+    runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
+    runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
+    runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
+    runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
+    runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 1.0);
   
 }

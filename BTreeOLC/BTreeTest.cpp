@@ -281,9 +281,9 @@ double multiInsertThreadedBenchmark(
 
     printf("Insert Retries\n");
     for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i, insertRetries[i].load());
+        printf("Retries %d: %d\n", i, (insertRetries[i].load()) / numRuns);
     }
-    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
+    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
 
     return currElapsed/numRuns; 
@@ -340,7 +340,7 @@ double multiLookupThreadedBenchmark(
     
     printf("Lookup Retries\n");
     for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i, lookupRetries[i].load());
+        printf("Retries %d: %d\n", i, (lookupRetries[i].load()) / numRuns);
     }    
     
     //printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
@@ -399,12 +399,12 @@ double multiThreadedMixedBenchmark(
 
     printf("Insert Retries\n");
     for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i,  insertRetries[i].load());
+        printf("Retries %d: %d\n", i,  (insertRetries[i].load()) / numRuns);
     }
     
     printf("Lookup Retries\n");
     for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i, lookupRetries[i].load());
+        printf("Retries %d: %d\n", i,(lookupRetries[i].load()) / numRuns);
     }
     
     //printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));

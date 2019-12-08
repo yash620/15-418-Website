@@ -188,6 +188,14 @@ namespace btreesinglethread {
                 return 0; 
             } 
             
+            int* getInsertRetries() {
+                return NULL;
+            }
+            
+            int* getLookupRetries() {
+                return NULL;
+            }
+            
             void clear() {
                 root = new BTreeLeaf<Key,Value>();
             }

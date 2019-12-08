@@ -187,6 +187,14 @@ namespace btreelocked {
             int getLookupFallbackTimes() {
                 return 0; 
             } 
+           
+            int* getInsertRetries() {
+                return NULL;
+            }
+            
+            int* getLookupRetries() {
+                return NULL;
+            } 
             
             BTree() {
                 root = new BTreeLeaf<Key,Value>();

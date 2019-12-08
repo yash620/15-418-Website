@@ -9,7 +9,7 @@
 #include <functional>
 #include <shared_mutex>
 
-#define MAX_TRANSACTION_RESTART 6 
+#define MAX_TRANSACTION_RESTART 16 
 namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
@@ -19,7 +19,9 @@ namespace btreertm{
     // (sizeof Key + sizeof Payload) * 31 + sizeof NodeBase
     static const uint64_t pageSize = 3968 + 72; 
     static thread_local int insertFallbackTimes = 0;
+    static thread_local int insertRetries[2 * MAX_TRANSACTION_RESTART] = {0};
     static thread_local int lookupFallbackTimes = 0;
+    static thread_local int lookupRetries[2 * MAX_TRANSACTION_RESTART] = {0};
 
     struct OptLock {
         std::atomic<uint64_t> typeVersionLockObsolete{0b100};
@@ -294,6 +296,14 @@ namespace btreertm{
                 return lookupFallbackTimes;
             } 
             
+            int* getInsertRetries() {
+                return insertRetries;
+            }
+            
+            int* getLookupRetries() {
+                return lookupRetries;
+            }
+            
             void clear() {
                 delete root;
                 insertFallbackTimes = 0;
@@ -343,6 +353,10 @@ namespace btreertm{
                 int restartCount = 0;
                 int restartReason = 156;
         restart:
+                insertRetries[restartCount] += 1;
+                if(restartCount > 0) {
+                    insertRetries[restartCount - 1] -= 1;
+                }
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
                     //fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     //fprintf(stderr, "Due to %d\n", restartReason);
@@ -561,6 +575,11 @@ restart:
             bool lookup(Key k, Value& result) {
                 int restartCount = 0;
 restart:
+                lookupRetries[restartCount] += 1;
+                if(restartCount > 0) {
+                    lookupRetries[restartCount - 1] -= 1;
+                }
+            
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
                     lookupFallbackTimes++;
                     return lookupLatched(k, result);

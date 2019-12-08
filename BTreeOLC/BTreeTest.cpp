@@ -426,7 +426,7 @@ double singleThreadedLookupBenchmark(
 }
 
 void runInsertBenchmarks(int numThreads, int numOperations) {
-     btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreelocked::BTree<int64_t, int64_t> idx_locked;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
@@ -460,7 +460,7 @@ void runInsertBenchmarks(int numThreads, int numOperations) {
 }
 
 void runLookupBenchmarks(int numThreads, int numOperations) {
-     btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreelocked::BTree<int64_t, int64_t> idx_locked;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
@@ -494,7 +494,7 @@ void runLookupBenchmarks(int numThreads, int numOperations) {
 }
 
 void runMixedBenchmarks(int numThreads, int numOperations, double percentInsert) {
-    btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
     btreeolc::BTree<int64_t, int64_t> idx_olc;
     btreelocked::BTree<int64_t, int64_t> idx_locked;
     btreesinglethread::BTree<int64_t, int64_t> idx_single;
@@ -566,14 +566,14 @@ void runLockedTests(int numThreads) {
 }
 
 void runRTMTests(int numThreads) {
-    btreertm::BTree<int64_t, int64_t> idx_rtm;
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
     fprintf(stderr,"Testing Single Threaded idx_rtm \n");
     testTreeSingleThreaded(idx_rtm);
 
     fprintf(stderr,"Testing Single Threaded Mixed idx_rtm \n");
     testMixedTreeSingleThreaded(idx_rtm);
 
-    fprintf(stderr, "Testing Inserts following by Looksups idx_olc \n");
+    fprintf(stderr, "Testing Inserts following by Looksups idx_rtm \n");
     testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_rtm, numThreads);
 
     fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
@@ -582,11 +582,24 @@ void runRTMTests(int numThreads) {
     fprintf(stderr, "---------------------------------\n");
 }
 
-int main(int argc, char *argv[]) {
-    btreertm::BTree<int64_t, int64_t> idx_rtm;
-    btreeolc::BTree<int64_t, int64_t> idx_olc;
-    btreesinglethread::BTree<int64_t, int64_t> idx_single;
+void runRTMWeavedTests(int numThreads) {
+    btreertm::BTree<int64_t, int64_t> idx_weaved(true);
+    fprintf(stderr,"Testing Single Threaded idx_weaved \n");
+    testTreeSingleThreaded(idx_weaved);
 
+    fprintf(stderr,"Testing Single Threaded Mixed idx_weaved \n");
+    testMixedTreeSingleThreaded(idx_weaved);
+
+    fprintf(stderr, "Testing Inserts following by Looksups idx_olc \n");
+    testMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_weaved, numThreads);
+
+    fprintf(stderr,"Testing MultiThreaded Mixed idx_rtm \n");
+    testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_weaved, numThreads);
+
+    fprintf(stderr, "---------------------------------\n"); 
+}
+
+int main(int argc, char *argv[]) {
     int numThreads = MULTI_NUM_THREADS; 
     double percentInsert = 0.5;
     char *temp;
@@ -599,6 +612,7 @@ int main(int argc, char *argv[]) {
     }
 
     runRTMTests(10);
+    runRTMWeavedTests(10);
     runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
     runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
     runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);

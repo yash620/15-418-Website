@@ -12,6 +12,12 @@ debug: BTreeTest.cpp BTreeOLC.h BTree_single_threaded.h WorkloadGenerator.h
 workload: GenerateWorkload.cpp WorkloadGenerator.h
 	$(CXX) $(CFLAGS) -DDEBUG -o GenerateWorkload.out GenerateWorkload.cpp
 
+benchmark: test 
+	for threads in 40 1 2 4 8 16 32 ; do \
+		echo "---------------------------NEW RUN-----------------------\n"  ; \
+		./BTreeTest.out $$threads 1>> ../transaction_surrounding_call_benchmark.out ; \
+	done
+
 clean: 
 	rm -rf *.out
 	rm -rf *.dSYM

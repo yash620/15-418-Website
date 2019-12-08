@@ -279,9 +279,11 @@ namespace btreertm{
     template<class Key,class Value>
         struct BTree {
            NodeBase* root;
+           bool weaved;
 
-            BTree() {
+            BTree(bool weaved_) {
                 root = new BTreeLeaf<Key,Value>();
+                weaved = weaved_;
             }
             
             int getInsertFallbackTimes() {
@@ -396,6 +398,14 @@ namespace btreertm{
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
+                    if(weaved) {
+                        _xend();
+                        if(_xbegin() != _XBEGIN_STARTED)
+                            goto restart;
+
+                        if(node != inner->children[inner->lowerBound(k)]) 
+                            goto restart;
+                    }
                 }
 
                 //Touch parent lock data to ensure atomicity
@@ -572,6 +582,15 @@ restart:
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
+
+                    if(weaved) {
+                        _xend();
+                        if(_xbegin() != _XBEGIN_STARTED)
+                            goto restart;
+
+                        if(node != inner->children[inner->lowerBound(k)]) 
+                            goto restart;
+                    }
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);

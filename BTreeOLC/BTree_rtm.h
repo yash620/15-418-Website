@@ -390,6 +390,12 @@ namespace btreertm{
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
+                     _xend();
+                    if(_xbegin() != _XBEGIN_STARTED)
+                        goto restart;
+
+                    if(node != inner->children[inner->lowerBound(k)]) 
+                        goto restart;
                 }
 
                 //Touch parent lock data to ensure atomicity
@@ -566,6 +572,13 @@ restart:
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
+
+                    _xend();
+                    if(_xbegin() != _XBEGIN_STARTED)
+                        goto restart;
+
+                    if(node != inner->children[inner->lowerBound(k)]) 
+                        goto restart;
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);

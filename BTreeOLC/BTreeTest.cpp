@@ -249,7 +249,7 @@ double multiInsertThreadedBenchmark(
     double currElapsed = 0;
     int numValuesPerThreads = numOperations/numThreads; 
     std::atomic<int> insertFallbacks = 0;
-    std::atomic<int> insertRetries[16] = {0};
+    std::atomic<unsigned int> insertRetries[20] = {0};
     
     for(int run = 0; run < numRuns; run++) {
         Timer t;
@@ -259,7 +259,7 @@ double multiInsertThreadedBenchmark(
                 indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, insertFallbacks);
                 int *temp = idx.getInsertRetries();
                 if(temp) {
-                    for(int i = 0; i < 16; i++) {
+                    for(int i = 0; i <= 17; i++) {
                         insertRetries[i].fetch_add(temp[i]);
                     }
                 }
@@ -280,10 +280,10 @@ double multiInsertThreadedBenchmark(
     }
 
     printf("Insert Retries\n");
-    for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i, (insertRetries[i].load()) / numRuns);
+    for(int i = 0; i <= 17; i++) {   
+        printf("%f\n", (float)(insertRetries[i].load()) / numRuns);
     }
-    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
+    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
 
     return currElapsed/numRuns; 
@@ -306,7 +306,7 @@ double multiLookupThreadedBenchmark(
     int numOperations = keys.size();
     std::atomic<int> insertFallbacks = 0;
     std::atomic<int> lookupFallbacks = 0;
-    std::atomic<int> lookupRetries[16] = {0};
+    std::atomic<unsigned int> lookupRetries[20] = {0};
 
     double currElapsed = 0;
     int numValuesPerThreads = numOperations/numThreads; 
@@ -319,7 +319,7 @@ double multiLookupThreadedBenchmark(
                 indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, lookupFallbacks);
                 int *tempLookup = idx.getLookupRetries();
                 if(tempLookup) {
-                    for(int i = 0; i < 16; i++) {
+                    for(int i = 0; i <= 17; i++) {
                        lookupRetries[i].fetch_add(tempLookup[i]);
                     }
                 }
@@ -339,11 +339,11 @@ double multiLookupThreadedBenchmark(
     }
     
     printf("Lookup Retries\n");
-    for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i, (lookupRetries[i].load()) / numRuns);
+    for(int i = 0; i <= 17; i++) {   
+        printf("%f\n", (float)(lookupRetries[i].load()) / numRuns);
     }    
     
-    //printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
+    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
 
     idx.clear();
@@ -362,8 +362,8 @@ double multiThreadedMixedBenchmark(
     double currElapsed = 0;
     std::atomic<int> insertFallbacks = 0;
     std::atomic<int> lookupFallbacks = 0;
-    std::atomic<int> insertRetries[16] = {0};
-    std::atomic<int> lookupRetries[16] = {0};
+    std::atomic<unsigned int> insertRetries[20] = {0};
+    std::atomic<unsigned int> lookupRetries[20] = {0};
 
     for(int run = 0; run < numRuns; run++){
         Timer t;
@@ -374,13 +374,13 @@ double multiThreadedMixedBenchmark(
                 lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
                 int *tempInsert = idx.getLookupRetries();
                 if(tempInsert) {
-                    for(int i = 0; i < 16; i++) {
+                    for(int i = 0; i <= 17; i++) {
                        insertRetries[i].fetch_add(tempInsert[i]);
                     }
                 }
                 int *tempLookup = idx.getLookupRetries();
                 if(tempLookup) {
-                    for(int i = 0; i < 16; i++) {
+                    for(int i = 0; i <= 17; i++) {
                        lookupRetries[i].fetch_add(tempLookup[i]);
                     }
                 } 
@@ -398,17 +398,17 @@ double multiThreadedMixedBenchmark(
     }
 
     printf("Insert Retries\n");
-    for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i,  (insertRetries[i].load()) / numRuns);
+    for(int i = 0; i <= 17; i++) {   
+        printf("%f\n", (float)(insertRetries[i].load()) / numRuns);
     }
     
     printf("Lookup Retries\n");
-    for(int i = 0; i < 16; i++) {   
-        printf("Retries %d: %d\n", i,(lookupRetries[i].load()) / numRuns);
+    for(int i = 0; i <= 17; i++) {   
+        printf("%f\n", (float)(lookupRetries[i].load()) / numRuns);
     }
     
-    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
-    //printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
+    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
+    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
     printf("Average Execution Time: %.6fs \n", currElapsed/numRuns);
     return currElapsed/numRuns;
 }
@@ -763,7 +763,7 @@ void runRetryCountsBenchmarks(int numThreads, int numOperations, double percentI
     std::vector<std::vector<workload::Operation>> workloads = 
         generator.generateParallelWorkload(percentInsert, numOperations, numThreads);
 
-    fprintf(stdout, "Waming up cache: Benchmarking idx_olc \n");
+    fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
     multiThreadedMixedBenchmark(idx_rtm, 2, workloads);
 
     fprintf(stdout, "Running fallback counts benchmark index rtm\n");
@@ -784,8 +784,8 @@ int main(int argc, char *argv[]) {
         percentInsert = atof(argv[2]);
     }
 
-    runRTMTests(10);
-    runRTMWeavedTests(10);
+    //runRTMTests(10);
+    //runRTMWeavedTests(10);
 
     runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
     runRetryCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);

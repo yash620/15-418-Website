@@ -308,6 +308,10 @@ namespace btreertm{
                 delete root;
                 insertFallbackTimes = 0;
                 lookupFallbackTimes = 0;
+                for(int i = 0; i <= MAX_TRANSACTION_RESTART; i++) {
+                    insertRetries[i] = 0;
+                    lookupRetries[i] = 0;
+                }
                 root = new BTreeLeaf<Key, Value>();
             }
 

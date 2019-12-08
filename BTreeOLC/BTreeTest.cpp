@@ -46,12 +46,14 @@ void indexInsert(
     int startValue, 
     int endValue, 
     std::vector<int64_t>& keys, 
-    std::vector<int64_t>& values
+    std::vector<int64_t>& values,
+    std::atomic<int>& insertFallbacks
 ) {
     for(auto i = startValue; i < endValue; i++){
         //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
+    insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
 }
 
 template <class Index> 
@@ -82,13 +84,14 @@ void indexLookup(
     int startValue,
     int endValue,
     std::vector<int64_t>& keys,
-    std::vector<int64_t>& values
+    std::vector<int64_t>& values,
+    std::atomic<int>& lookupFallbacks
 ) {
    for(auto i = startValue; i < endValue; i++){
-        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         int64_t result;
         idx.lookup(keys[i], result);
    } 
+   lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
 }
 
 template <class Index>
@@ -133,9 +136,10 @@ template <class Index>
 void testTreeSingleThreaded(Index& idx) {
     std::vector<int64_t> keys;
     std::vector<int64_t> values;
+    std::atomic<int> insertFallbacks = 0;
 
     generateRandomValues(NUM_ELEMENTS_TEST, keys, values);
-    indexInsert<Index>(0, idx, 0, keys.size(), keys, values); 
+    indexInsert<Index>(0, idx, 0, keys.size(), keys, values, insertFallbacks); 
 
     assert(idx.checkTree());
     indexLookupAssert<Index>(0, idx, 0, keys.size(), keys, values);
@@ -164,16 +168,17 @@ void testMultiThreaded(Index &idx, int numThreads) {
 
     generateRandomValues(NUM_ELEMENTS_MULTI_TEST, keys, values); 
     int numValuesPerThreads = NUM_ELEMENTS_MULTI_TEST/numThreads;
-    
+    std::atomic<int> insertFallbacks = 0;
+     
     int i;
     for(i = 0; i < numThreads-1; i++) {
         threads.push_back(std::thread([&](int threadId){
-            indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+            indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, insertFallbacks);
         }, i));
     }
 
     threads.push_back(std::thread([&](int threadId){
-        indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, keys.size(), keys, values);
+        indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, keys.size(), keys, values, insertFallbacks);
     }, i));
 
     for(std::thread& t : threads) {
@@ -212,6 +217,7 @@ void testMixedTreeMultiThreaded(Index& idx, int numThreads) {
                                                                                     NUM_ELEMENTS_MULTI_TEST,
                                                                                     numThreads);
     std::vector<std::thread> threads;
+
     for(int i = 0; i < numThreads; i++) {
         threads.push_back(std::thread([&](int threadId){
             executeWorkloadAssert(idx, ops[threadId]);
@@ -220,6 +226,7 @@ void testMixedTreeMultiThreaded(Index& idx, int numThreads) {
     for(std::thread& t : threads) {
         t.join(); 
     }
+    
     idx.clear();
 }
 
@@ -241,30 +248,30 @@ double multiInsertThreadedBenchmark(
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    int insertFallbackTimes;
+    std::atomic<int> insertFallbacks = 0;
+    
     for(int run = 0; run < numRuns; run++) {
         Timer t;
         int i;
         for(i = 0; i < numThreads-1; i++) {
             threads.push_back(std::thread([&](int threadId){
-                indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+                indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, insertFallbacks);
             }, i));
         }
         t.reset();
         
         int currThreadId = numThreads-1;
-        indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
+        indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, insertFallbacks);
         for(std::thread& t : threads) {
             t.join(); 
         }
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
-        insertFallbackTimes += idx.insertFallbackTimes;
         idx.clear();
         threads.clear();
     }
-    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbackTimes)/numRuns);
+    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     return currElapsed; 
@@ -285,22 +292,24 @@ double multiLookupThreadedBenchmark(
  ) {
     std::vector<std::thread> threads; 
     int numOperations = keys.size();
+    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> lookupFallbacks = 0;
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+    indexInsert<Index>(0, idx, 0, numOperations, keys, values, insertFallbacks);
     for(int run = 0; run < numRuns; run++) {
         Timer t;
         int i;
         for(i = 0; i < numThreads-1; i++) {
             threads.push_back(std::thread([&](int threadId){
-                indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values);
+                indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, lookupFallbacks);
             }, i));
         }
         t.reset();
         
         int currThreadId = numThreads-1;
-        indexLookup<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values);
+        indexLookup<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, lookupFallbacks);
         for(std::thread& t : threads) {
             t.join(); 
         }
@@ -309,8 +318,8 @@ double multiLookupThreadedBenchmark(
         currElapsed = std::min(elapsed, currElapsed);
         threads.clear();
     }
-
-    //printf("Average Lookup Fallback Times: %d \n", idx.lookupFallbackTimes/numRuns);
+    
+    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
@@ -327,13 +336,15 @@ double multiThreadedMixedBenchmark(
 ) {
     std::vector<std::thread> threads;
     double currElapsed = DBL_MAX;
-    double insertFallbackTimes = 0;
-    double lookupFallbackTimes = 0;
+    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> lookupFallbacks = 0;
     for(int run = 0; run < numRuns; run++){
         Timer t;
         for(int i = 0; i < workloads.size(); i++) {
             threads.push_back(std::thread([&](int threadId){
                 executeWorkload(idx, workloads[threadId]);
+                insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
+                lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
             }, i));
         }
 
@@ -344,13 +355,11 @@ double multiThreadedMixedBenchmark(
         double elapsed = t.elapsed();
         currElapsed = std::min(elapsed, currElapsed);
         threads.clear();
-        lookupFallbackTimes += idx.lookupFallbackTimes;
-        insertFallbackTimes += idx.insertFallbackTimes;
         idx.clear(); 
     }
 
-    //printf("Average Insert Fallback times: %d \n", insertFallbackTimes/numRuns);
-    //printf("Average Lookup Fallback times: %d \n", lookupFallbackTimes/numRuns);
+    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
+    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
     printf("Execution Time: %.6fms \n", currElapsed);
     return currElapsed;
 }
@@ -372,13 +381,13 @@ double singleThreadedInsertBenchmark(
     int numRuns  
  ) {
     std::vector<std::thread> threads; 
-
+    std::atomic<int> insertFallbacks = 0;
     int numOperations = keys.size();
     double currElapsed = DBL_MAX;
     Timer t; 
     for(int i = 0; i < numRuns; i++) {
         t.reset();
-        indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+        indexInsert<Index>(0, idx, 0, numOperations, keys, values, insertFallbacks);
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
@@ -397,14 +406,16 @@ double singleThreadedLookupBenchmark(
     int numRuns  
  ) {
     std::vector<std::thread> threads; 
-
+    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> lookupFallbacks = 0;
+    
     int numOperations = keys.size();
     double currElapsed = DBL_MAX;
-    indexInsert<Index>(0, idx, 0, numOperations, keys, values);
+    indexInsert<Index>(0, idx, 0, numOperations, keys, values, insertFallbacks);
     Timer t; 
     for(int i = 0; i < numRuns; i++) {
         t.reset();
-        indexLookup<Index>(0, idx, 0, keys.size(), keys, values);
+        indexLookup<Index>(0, idx, 0, keys.size(), keys, values, lookupFallbacks);
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
     }

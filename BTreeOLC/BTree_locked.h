@@ -179,7 +179,15 @@ namespace btreelocked {
             std::atomic<NodeBase*> root;
             int insertFallbackTimes;
             int lookupFallbackTimes;
-
+            
+            int getInsertFallbackTimes() {
+                return 0; 
+            }
+            
+            int getLookupFallbackTimes() {
+                return 0; 
+            } 
+            
             BTree() {
                 root = new BTreeLeaf<Key,Value>();
             }

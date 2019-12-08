@@ -238,6 +238,14 @@ namespace btreeolc {
                 root = new BTreeLeaf<Key,Value>();
             }
 
+            int getInsertFallbackTimes() {
+                return 0; 
+            }
+            
+            int getLookupFallbackTimes() {
+                return 0; 
+            } 
+            
             void clear() {
                 root = new BTreeLeaf<Key,Value>();
             }

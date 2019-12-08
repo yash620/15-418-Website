@@ -18,6 +18,8 @@ namespace btreertm{
     
     // (sizeof Key + sizeof Payload) * 31 + sizeof NodeBase
     static const uint64_t pageSize = 3968 + 72; 
+    static thread_local int insertFallbackTimes = 0;
+    static thread_local int lookupFallbackTimes = 0;
 
     struct OptLock {
         std::atomic<uint64_t> typeVersionLockObsolete{0b100};
@@ -277,15 +279,19 @@ namespace btreertm{
     template<class Key,class Value>
         struct BTree {
            NodeBase* root;
-           int insertFallbackTimes;
-           int lookupFallbackTimes;
 
             BTree() {
                 root = new BTreeLeaf<Key,Value>();
-                insertFallbackTimes = 0;
-                lookupFallbackTimes = 0;
             }
-
+            
+            int getInsertFallbackTimes() {
+                return insertFallbackTimes;
+            }
+            
+            int getLookupFallbackTimes() {
+                return lookupFallbackTimes;
+            } 
+            
             void clear() {
                 delete root;
                 insertFallbackTimes = 0;
@@ -338,7 +344,7 @@ namespace btreertm{
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
                     //fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     //fprintf(stderr, "Due to %d\n", restartReason);
-                    //insertFallbackTimes++;
+                    insertFallbackTimes++;
                     insertLatched(k, v);
                     return; 
                 }
@@ -546,7 +552,7 @@ restart:
                 int restartCount = 0;
 restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
-                    //lookupFallbackTimes++;
+                    lookupFallbackTimes++;
                     return lookupLatched(k, result);
                 }
 
@@ -650,5 +656,4 @@ restart:
             }
 
         };
-
 }

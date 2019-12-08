@@ -334,22 +334,6 @@ namespace btreertm{
             }
 
             void insert(Key k, Value v) {
-                if (weaved) {
-                    insertWeaved(k, v);
-                } else {
-                    insertTransactional(k, v);
-                }
-            }
-
-            bool lookup(Key k, Value& v) {
-                if(weaved){
-                    return lookupWeaved(k, v);
-                }
-
-                return lookupTransacitonal(k, v);
-            }
-
-            void insertTransactional(Key k, Value v) {
                 int restartCount = 0;
                 int restartReason = 156;
         restart:
@@ -408,116 +392,14 @@ namespace btreertm{
                     parent = inner;
 
                     node = inner->children[inner->lowerBound(k)];
-                }
+                    if(weaved) {
+                        _xend();
+                        if(_xbegin() != _XBEGIN_STARTED)
+                            goto restart;
 
-                //Touch parent lock data to ensure atomicity
-                 if(parent) {
-                        if(parent->isLocked(parent->typeVersionLockObsolete.load())) {
-                            _xabort(4);
-                        }
-                        // if(parent->has_lock == 1) {
-                        //     _xabort(4);
-                        // }
+                        if(node != inner->children[inner->lowerBound(k)]) 
+                            goto restart;
                     }
-
-                auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                // if(leaf->has_lock == 1) {
-                //     _xabort(3);
-                // }
-                if(leaf->isLocked(leaf->typeVersionLockObsolete.load()))  {
-                    _xabort(3);
-                }
-
-                // Split leaf if full
-                if (leaf->count>=leaf->maxEntries) {
-                    // Split
-                    // goToLatched = true;
-                    // _xabort(12);
-                    Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
-                    if (parent)
-                        parent->insert(sep, newLeaf);
-                    else
-                        makeRoot(sep, leaf, newLeaf);
-                    parent->updateVersionTSX();
-                    leaf->updateVersionTSX();
-                    _xend();
-                    goto restart;
-                } else {
-                    // only lock leaf node
-                    if(!leaf->insert(k, v)) {
-                        _xabort(5);
-                    }
-                    // success
-                }
-                leaf->updateVersionTSX();
-                _xend();
-            }
-
-            void insertWeaved(Key k, Value v) {
-                int restartCount = 0;
-                int restartReason = 156;
-        restart:
-                if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    //fprintf(stderr, "Going to latched version, key: %ld\n", k);
-                    //fprintf(stderr, "Due to %d\n", restartReason);
-                    //insertFallbackTimes++;
-                    insertLatched(k, v);
-                    return; 
-                }
-
-                if((restartReason = _xbegin()) != _XBEGIN_STARTED) {
-                    goto restart;
-                }
-
-                // Current node
-                NodeBase* node = root;
-
-                // Parent of current node
-                BTreeInner<Key>* parent = nullptr;
-                uint64_t versionParent;
-
-                while (node->type==PageType::BTreeInner) {
-                    auto inner = static_cast<BTreeInner<Key>*>(node);
-                    // if(node->has_lock == 1) {
-                    //     _xabort(1);
-                    // }
-                    if(node->isLocked(node->typeVersionLockObsolete.load()) ) {
-                        _xabort(1);
-                    }
-
-                    //Touch parent lock data to ensure atomicity
-                    if(parent) {
-                        if(parent->isLocked(parent->typeVersionLockObsolete.load()) ) {
-                            _xabort(1);
-                        }
-                        // if(parent->has_lock == 1) {
-                        //     _xabort(2);
-                        // }
-                    }
-
-                    // Split eagerly if full
-                    if (inner->isFull()) {
-                        // Split
-                        Key sep; BTreeInner<Key>* newInner = inner->split(sep);
-                        if (parent)
-                            parent->insert(sep,newInner);
-                        else
-                            makeRoot(sep,inner,newInner);
-                        parent->updateVersionTSX();
-                        inner->updateVersionTSX();
-                        _xend(); 
-                        goto restart;
-                    }
-
-                    parent = inner;
-
-                    node = inner->children[inner->lowerBound(k)];
-                     _xend();
-                    if(_xbegin() != _XBEGIN_STARTED)
-                        goto restart;
-
-                    if(node != inner->children[inner->lowerBound(k)]) 
-                        goto restart;
                 }
 
                 //Touch parent lock data to ensure atomicity
@@ -670,50 +552,7 @@ restart:
                 }
             }
 
-            bool lookupTransacitonal(Key k, Value & result) {
-                 int restartCount = 0;
-restart:
-                if(restartCount++ > MAX_TRANSACTION_RESTART) {
-                    //lookupFallbackTimes++;
-                    return lookupLatched(k, result);
-                }
-
-                if(_xbegin() != _XBEGIN_STARTED) {
-                    goto restart;
-                }
-                NodeBase* node = root;
-
-                // Parent of current node
-                BTreeInner<Key>* parent = nullptr;
-
-                while (node->type==PageType::BTreeInner) {
-                    auto inner = static_cast<BTreeInner<Key>*>(node);
-                    if(inner->isLocked(inner->typeVersionLockObsolete.load()) ) {
-                            _xabort(4);
-                    }
-                    parent = inner;
-
-                    node = inner->children[inner->lowerBound(k)];
-                }
-
-                BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-               if(leaf->isLocked(leaf->typeVersionLockObsolete.load()) ) {
-                        _xabort(1);
-                }
-                assert(leaf->count <= leaf->maxEntries);
-                leaf->restructure();
-                unsigned pos = leaf->lowerBound(k);
-                bool success;
-                if ((pos<leaf->count) && (leaf->keys[pos]==k)) {
-                    success = true;
-                    result = leaf->payloads[pos];
-                }
-                
-                _xend();
-                return success;    
-            }
-
-            bool lookupWeaved(Key k, Value& result) {
+            bool lookup(Key k, Value& result) {
                 int restartCount = 0;
 restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
@@ -738,12 +577,14 @@ restart:
 
                     node = inner->children[inner->lowerBound(k)];
 
-                    _xend();
-                    if(_xbegin() != _XBEGIN_STARTED)
-                        goto restart;
+                    if(weaved) {
+                        _xend();
+                        if(_xbegin() != _XBEGIN_STARTED)
+                            goto restart;
 
-                    if(node != inner->children[inner->lowerBound(k)]) 
-                        goto restart;
+                        if(node != inner->children[inner->lowerBound(k)]) 
+                            goto restart;
+                    }
                 }
 
                 BTreeLeaf<Key,Value>* leaf = static_cast<BTreeLeaf<Key,Value>*>(node);

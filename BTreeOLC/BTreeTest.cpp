@@ -40,6 +40,10 @@ void generateRandomValues(
     fprintf(stderr, "Done generating random numbers \n");
 }
 
+void updateFallbackCount(std::atomic<int>& fallbackCount, int currFallback) {
+    fallbackCount.fetch_add(currFallback);
+}
+
 template <class Index> 
 void indexInsert(
     int threadId,
@@ -54,17 +58,8 @@ void indexInsert(
         //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
-    int insertFallbackExpected = insertFallbacks;
-    int min = std::min(insertFallbacks.load(), idx.getInsertFallbackTimes());
-    while(min < insertFallbackExpected) {
-            if(!insertFallbacks.compare_exchange_strong(insertFallbackExpected, min)) {
-                insertFallbackExpected = insertFallbacks;
-                std::min(insertFallbacks.load(), idx.getInsertFallbackTimes());
-            } else {
-                return;
-            }
-    }
-    //insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
+
+    updateFallbackCount(insertFallbacks, idx.getInsertFallbackTimes());
 }
 
 template <class Index> 
@@ -103,17 +98,7 @@ void indexLookup(
         idx.lookup(keys[i], result);
    } 
 
-   int lookupFallbackExpected = lookupFallbacks;
-   int min = std::min(lookupFallbacks.load(), idx.getInsertFallbackTimes());
-   while(min < lookupFallbackExpected) {
-        if(!lookupFallbacks.compare_exchange_strong(lookupFallbackExpected, min)) {
-            lookupFallbackExpected = lookupFallbacks;
-            std::min(lookupFallbacks.load(), idx.getInsertFallbackTimes());
-        } else {
-            return;
-        }
-   }
-   lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
+    updateFallbackCount(lookupFallbacks, idx.getLookupFallbackTimes());
 }
 
 template <class Index>
@@ -129,6 +114,7 @@ void executeWorkload(
             idx.lookup(op.key, result);
         }
     }
+    
 }
 
 template <class Index>
@@ -358,15 +344,17 @@ double multiThreadedMixedBenchmark(
 ) {
     std::vector<std::thread> threads;
     double currElapsed = DBL_MAX;
-    std::atomic<int> insertFallbacks = INT_MAX;
-    std::atomic<int> lookupFallbacks = INT_MAX;
+    int insertFallbacks = INT_MAX;
+    int lookupFallbacks = INT_MAX;
     for(int run = 0; run < numRuns; run++){
+        std::atomic<int> currIterInsertFallback = 0;
+        std::atomic<int> currIterLookupFallback = 0;
         Timer t;
         for(int i = 0; i < workloads.size(); i++) {
             threads.push_back(std::thread([&](int threadId){
                 executeWorkload(idx, workloads[threadId]);
-                insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
-                lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
+                updateFallbackCount(currIterLookupFallback, idx.getLookupFallbackTimes());
+                updateFallbackCount(currIterInsertFallback, idx.getInsertFallbackTimes());
             }, i));
         }
 
@@ -374,14 +362,17 @@ double multiThreadedMixedBenchmark(
         for(std::thread& t : threads) {
             t.join(); 
         }
+        
+        insertFallbacks= std::min(currIterInsertFallback.load(), insertFallbacks);
+        lookupFallbacks = std::min(currIterLookupFallback.load(), lookupFallbacks);
         double elapsed = t.elapsed();
         currElapsed = std::min(elapsed, currElapsed);
         threads.clear();
         idx.clear(); 
     }
 
-    printf("Took Insert Fallback %f times \n", insertFallbacks.load());
-    printf("Took Lookup Fallback %f times \n", lookupFallbacks.load());
+    printf("Took Insert Fallback %d times \n", insertFallbacks);
+    printf("Took Lookup Fallback %d times \n", lookupFallbacks);
     printf("Execution Time: %.6fms \n", currElapsed);
     return currElapsed;
 }

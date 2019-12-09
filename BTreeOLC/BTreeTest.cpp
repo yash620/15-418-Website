@@ -256,30 +256,32 @@ double multiInsertThreadedBenchmark(
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    std::atomic<int> insertFallbacks = INT_MAX;
+    int insertFallbacks = INT_MAX;
     
     for(int run = 0; run < numRuns; run++) {
+        std::atomic<int> currIterInsertFallback = 0;
         Timer t;
         int i;
         for(i = 0; i < numThreads-1; i++) {
             threads.push_back(std::thread([&](int threadId){
-                indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, insertFallbacks);
+                indexInsert<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, currIterInsertFallback);
             }, i));
         }
         t.reset();
         
         int currThreadId = numThreads-1;
-        indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, insertFallbacks);
+        indexInsert<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, currIterInsertFallback);
         for(std::thread& t : threads) {
             t.join(); 
         }
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
+        insertFallbacks = std::min(currIterInsertFallback.load(), insertFallbacks);
         idx.clear();
         threads.clear();
     }
-    printf("Took Insert Fallback %f times \n", insertFallbacks.load());
+    printf("Took Insert Fallback %d times \n", insertFallbacks);
     printf("Execution Time: %.6fs \n", currElapsed);
 
     return currElapsed; 
@@ -300,34 +302,36 @@ double multiLookupThreadedBenchmark(
  ) {
     std::vector<std::thread> threads; 
     int numOperations = keys.size();
-    std::atomic<int> insertFallbacks = INT_MAX;
-    std::atomic<int> lookupFallbacks = INT_MAX;
+    int lookupFallbacks = INT_MAX;
+    std::atomic<int> currIterInsertFallback = 0;
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    indexInsert<Index>(0, idx, 0, numOperations, keys, values, insertFallbacks);
+    indexInsert<Index>(0, idx, 0, numOperations, keys, values, currIterInsertFallback);
     for(int run = 0; run < numRuns; run++) {
+        std::atomic<int> currIterLookupFallback = 0;
         Timer t;
         int i;
         for(i = 0; i < numThreads-1; i++) {
             threads.push_back(std::thread([&](int threadId){
-                indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, lookupFallbacks);
+                indexLookup<Index>(threadId, idx, threadId * numValuesPerThreads, (threadId+1) * numValuesPerThreads, keys, values, currIterLookupFallback);
             }, i));
         }
         t.reset();
         
         int currThreadId = numThreads-1;
-        indexLookup<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, lookupFallbacks);
+        indexLookup<Index>(currThreadId, idx, currThreadId * numValuesPerThreads, keys.size(), keys, values, currIterLookupFallback);
         for(std::thread& t : threads) {
             t.join(); 
         }
 
         double elapsed = t.elapsed(); 
         currElapsed = std::min(elapsed, currElapsed);
+        lookupFallbacks = std::min(currIterLookupFallback.load(), lookupFallbacks);
         threads.clear();
     }
     
-    printf("Took Lookup Fallback %f times \n", lookupFallbacks.load());
+    printf("Took Lookup Fallback %d times \n", lookupFallbacks);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
@@ -701,9 +705,9 @@ int main(int argc, char *argv[]) {
     runRTMTests(10);
     runRTMWeavedTests(10);
 
-    //runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
-    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
+    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
+    // runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
+    // runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
+    // runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
     runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 1.0);
 }

@@ -6,6 +6,7 @@
 #include "WorkloadGenerator.h"
 
 #include <cassert>
+#include <climits>
 #include <vector>
 #include <time.h>
 #include <iostream>
@@ -53,7 +54,17 @@ void indexInsert(
         //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
-    insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
+    int insertFallbackExpected = insertFallbacks;
+    int min = std::min(insertFallbacks.load(), idx.getInsertFallbackTimes());
+    while(min < insertFallbackExpected) {
+            if(!insertFallbacks.compare_exchange_strong(insertFallbackExpected, min)) {
+                insertFallbackExpected = insertFallbacks;
+                std::min(insertFallbacks.load(), idx.getInsertFallbackTimes());
+            } else {
+                return;
+            }
+    }
+    //insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
 }
 
 template <class Index> 
@@ -91,6 +102,17 @@ void indexLookup(
         int64_t result;
         idx.lookup(keys[i], result);
    } 
+
+   int lookupFallbackExpected = lookupFallbacks;
+   int min = std::min(lookupFallbacks.load(), idx.getInsertFallbackTimes());
+   while(min < lookupFallbackExpected) {
+        if(!lookupFallbacks.compare_exchange_strong(lookupFallbackExpected, min)) {
+            lookupFallbackExpected = lookupFallbacks;
+            std::min(lookupFallbacks.load(), idx.getInsertFallbackTimes());
+        } else {
+            return;
+        }
+   }
    lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
 }
 
@@ -136,7 +158,7 @@ template <class Index>
 void testTreeSingleThreaded(Index& idx) {
     std::vector<int64_t> keys;
     std::vector<int64_t> values;
-    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
 
     generateRandomValues(NUM_ELEMENTS_TEST, keys, values);
     indexInsert<Index>(0, idx, 0, keys.size(), keys, values, insertFallbacks); 
@@ -168,7 +190,7 @@ void testMultiThreaded(Index &idx, int numThreads) {
 
     generateRandomValues(NUM_ELEMENTS_MULTI_TEST, keys, values); 
     int numValuesPerThreads = NUM_ELEMENTS_MULTI_TEST/numThreads;
-    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
      
     int i;
     for(i = 0; i < numThreads-1; i++) {
@@ -248,7 +270,7 @@ double multiInsertThreadedBenchmark(
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
-    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
     
     for(int run = 0; run < numRuns; run++) {
         Timer t;
@@ -271,8 +293,8 @@ double multiInsertThreadedBenchmark(
         idx.clear();
         threads.clear();
     }
-    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks)/numRuns);
-    printf("Execution Time: %.6fms \n", currElapsed);
+    printf("Took Insert Fallback %f times \n", insertFallbacks.load());
+    printf("Execution Time: %.6fs \n", currElapsed);
 
     return currElapsed; 
 
@@ -292,8 +314,8 @@ double multiLookupThreadedBenchmark(
  ) {
     std::vector<std::thread> threads; 
     int numOperations = keys.size();
-    std::atomic<int> insertFallbacks = 0;
-    std::atomic<int> lookupFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
+    std::atomic<int> lookupFallbacks = INT_MAX;
 
     double currElapsed = DBL_MAX;
     int numValuesPerThreads = numOperations/numThreads; 
@@ -319,7 +341,7 @@ double multiLookupThreadedBenchmark(
         threads.clear();
     }
     
-    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks)/numRuns);
+    printf("Took Lookup Fallback %f times \n", lookupFallbacks.load());
     printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
@@ -336,8 +358,8 @@ double multiThreadedMixedBenchmark(
 ) {
     std::vector<std::thread> threads;
     double currElapsed = DBL_MAX;
-    std::atomic<int> insertFallbacks = 0;
-    std::atomic<int> lookupFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
+    std::atomic<int> lookupFallbacks = INT_MAX;
     for(int run = 0; run < numRuns; run++){
         Timer t;
         for(int i = 0; i < workloads.size(); i++) {
@@ -358,8 +380,8 @@ double multiThreadedMixedBenchmark(
         idx.clear(); 
     }
 
-    printf("Took Insert Fallback average %f times \n", ((float)insertFallbacks/numRuns));
-    printf("Took Lookup Fallback average %f times \n", ((float)lookupFallbacks/numRuns));
+    printf("Took Insert Fallback %f times \n", insertFallbacks.load());
+    printf("Took Lookup Fallback %f times \n", lookupFallbacks.load());
     printf("Execution Time: %.6fms \n", currElapsed);
     return currElapsed;
 }
@@ -381,7 +403,7 @@ double singleThreadedInsertBenchmark(
     int numRuns  
  ) {
     std::vector<std::thread> threads; 
-    std::atomic<int> insertFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
     int numOperations = keys.size();
     double currElapsed = DBL_MAX;
     Timer t; 
@@ -406,8 +428,8 @@ double singleThreadedLookupBenchmark(
     int numRuns  
  ) {
     std::vector<std::thread> threads; 
-    std::atomic<int> insertFallbacks = 0;
-    std::atomic<int> lookupFallbacks = 0;
+    std::atomic<int> insertFallbacks = INT_MAX;
+    std::atomic<int> lookupFallbacks = INT_MAX;
     
     int numOperations = keys.size();
     double currElapsed = DBL_MAX;
@@ -599,6 +621,80 @@ void runRTMWeavedTests(int numThreads) {
     fprintf(stderr, "---------------------------------\n"); 
 }
 
+void runFallBackCountsBenchmarks(int numThreads, int numOperations, double percentInsert) {
+    btreertm::BTree<int64_t, int64_t> idx_weaved(true);
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
+    btreesinglethread::BTree<int64_t, int64_t> idx_single;
+
+
+    fprintf(stdout, "Running fallback counts benchmark: numThreads: %d, numOperations: %d, percentInsert: %f \n", 
+        numThreads, numOperations, percentInsert);
+    
+    if(percentInsert >= 1.0 || percentInsert <= 0.0) {
+        std::vector<int64_t> keys;
+        std::vector<int64_t> values;
+        keys.reserve(numOperations);
+        values.reserve(numOperations); 
+
+        generateRandomValues(numOperations, keys, values); 
+
+        if(percentInsert >= 1.0) {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded insert only idx_weaved \n");
+            multiInsertThreadedBenchmark(idx_weaved, numThreads, 5, keys, values);
+
+            fprintf(stdout, "Benchmarking Multithreaded insert only idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "Benchmarking single threaded insert only idx_single \n");
+            singleThreadedInsertBenchmark(idx_single, keys, values, 5); 
+            fprintf(stdout, "------------------------------ \n"); 
+        } else {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded lookup only idx_weaved \n");
+            multiLookupThreadedBenchmark(idx_weaved, numThreads, 5, keys, values);
+
+            fprintf(stdout, "Benchmarking Multithreaded lookup only idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "Benchmarking single threaded lookup only idx_single \n");
+            singleThreadedLookupBenchmark(idx_single, keys, values, 5); 
+            fprintf(stdout, "------------------------------ \n"); 
+        }
+
+        return;
+    }
+
+    workload::WorkloadGenerator generator;
+    std::vector<std::vector<workload::Operation>> workloads = 
+        generator.generateParallelWorkload(percentInsert, numOperations, numThreads);
+
+    fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+    multiThreadedMixedBenchmark(idx_rtm, 2, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index weaved \n");
+    multiThreadedMixedBenchmark(idx_weaved, 5, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index rtm\n");
+    multiThreadedMixedBenchmark(idx_rtm, 5, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index single");
+    Timer t;
+    for(int i = 0; i < workloads.size(); i++) {
+        executeWorkload(idx_single, workloads[i]);
+    }
+    double elapsed = t.elapsed(); 
+
+    fprintf(stdout, "Execution Time: %.6fs \n", elapsed);
+    fprintf(stdout, "------------------------------- \n");
+}
+
 int main(int argc, char *argv[]) {
     int numThreads = MULTI_NUM_THREADS; 
     double percentInsert = 0.5;
@@ -613,9 +709,10 @@ int main(int argc, char *argv[]) {
 
     runRTMTests(10);
     runRTMWeavedTests(10);
-    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
-    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
-    runMixedBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
-    runInsertBenchmarks(numThreads, NUM_ELEMENTS_MULTI);
-    runLookupBenchmarks(numThreads, NUM_ELEMENTS_MULTI);
+
+    //runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.0);
+    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.25);
+    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.5);
+    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 0.75);
+    runFallBackCountsBenchmarks(numThreads, NUM_ELEMENTS_MULTI, 1.0);
 }

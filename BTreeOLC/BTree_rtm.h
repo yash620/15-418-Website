@@ -357,10 +357,7 @@ namespace btreertm{
                 int restartCount = 0;
                 int restartReason = 156;
         restart:
-                insertRetries[restartCount] += 1;
-                if(restartCount > 0) {
-                    insertRetries[restartCount - 1] -= 1;
-                }
+                
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
                     //fprintf(stderr, "Going to latched version, key: %ld\n", k);
                     //fprintf(stderr, "Due to %d\n", restartReason);
@@ -368,7 +365,12 @@ namespace btreertm{
                     insertLatched(k, v);
                     return; 
                 }
-
+                
+                insertRetries[restartCount - 1] += 1;
+                if(restartCount > 1) {
+                    insertRetries[restartCount - 2] -= 1;
+                }
+                
                 if((restartReason = _xbegin()) != _XBEGIN_STARTED) {
                     goto restart;
                 }
@@ -579,16 +581,16 @@ restart:
             bool lookup(Key k, Value& result) {
                 int restartCount = 0;
 restart:
-                lookupRetries[restartCount] += 1;
-                if(restartCount > 0) {
-                    lookupRetries[restartCount - 1] -= 1;
-                }
-            
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
                     lookupFallbackTimes++;
                     return lookupLatched(k, result);
                 }
-
+                
+                lookupRetries[restartCount - 1] += 1;
+                if(restartCount > 1) {
+                    lookupRetries[restartCount - 2] -= 1;
+                }
+                
                 if(_xbegin() != _XBEGIN_STARTED) {
                     goto restart;
                 }

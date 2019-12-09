@@ -372,7 +372,7 @@ double multiThreadedMixedBenchmark(
                 executeWorkload(idx, workloads[threadId]);
                 insertFallbacks.fetch_add(idx.getInsertFallbackTimes());
                 lookupFallbacks.fetch_add(idx.getLookupFallbackTimes());
-                int *tempInsert = idx.getLookupRetries();
+                int *tempInsert = idx.getInsertRetries();
                 if(tempInsert) {
                     for(int i = 0; i <= 17; i++) {
                        insertRetries[i].fetch_add(tempInsert[i]);

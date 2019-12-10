@@ -1,4 +1,4 @@
-#  Midpoint Report: B+Trees for In-Memory Databases using Hardware Transactional Memory
+#  Final Report: B+Trees for In-Memory Databases using Hardware Transactional Memory
 
 ## Summary
 We implemented an optimized B+Tree using restricted transactional memory (RTM) and compared the performance with a more traditional optimistic lock coupling approach. Our deliverables include graphs and performance analysis indicating the benefits and drawbacks of RTM vs optimistic locking along with our HTM B+Tree implementation. We ran our experiments on a 2-socket machine that supports Intel® TSX® with two Intel® Xeon® Silver 4114 processors with 10 cores and 20 hyperthreads each. 

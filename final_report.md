@@ -112,6 +112,51 @@ Here we evaluated the differences in speedup between the OLC implementation and 
 
 #### Lookup Only Workload
 
+![LookupOnlyThread.png](images/LookupOnlyThread.png)
+
+In the lookup only workload there was very little difference in the speedups of the OLC and RTM speedups. This is so because in both implementations none of the threads would block the other threads. In the OLC version only read locks would be taken and in the RTM version the transactions would only read which would minimize the number of aborts. The locked speedup on the other hand is very low since it would block other threads at each node even when the node could be safely concurrently read. The same pattern held for scaling the dataset size. The RTM and OLC implementations had very similar speedups.
+
+![LookupOnlyWorkload.png](images/LookupOnlyWorkload.png)
+
+#### Mixed Insert and Lookup Workloads
+![MixedThread.png](images/MixedThread.png)
+
+In this case the RTM implementation does better than OLC for both 8 threads and 16 threads. And then the RTM speedup tapers off with more threads. We believed this tapering is because the workload isn’t large enough to effectively evaluate performance at the larger thread count.
+
+Once we scaled the workload size using 40 threads we saw that the RTM speedup beat the OLC speedup. This seems to indicate when the thread count and workload size are optimized RTM does better than OLC.
+
+![MixedWorkload.png](images/MixedOnlyWorkload.png)
+
+Though we don’t have the graphs here the workloads for 25% Insert and 75% Insert showed very similar patterns. These graphs are linked in the appendix section. 
+
+#### Insert Only Workload
+
+![InsertOnlyThread.png](images/InsertOnlyThread.png)
+
+![InsertOnlyWorkload.png](images/InsertOnlyWorkload.png)
+
+This a similar pattern as the previous workload except that the RTM implementation did better for 4 - 32 threads. The insert only workload has more work per thread than the previous workloads and seems to do better with larger thread counts than the previous workloads. This follows the observation we made above that when there is sufficient enough work to match the thread count than the RTM speedup is higher. Further confirming this is that in the Insert only workload the RTM implementation does better than the OLC implementation at smaller data set sizes than previous workloads. 
+
+#### Analysis
+
+From the graphs above we see that the RTM implementation does better than the OLC implementation at larger workload sizes. At the larger thread counts though the RTM version does worse but this is because 10,000,000 operations isn’t sufficient to overcome the overhead of operating on the larger thread counts for the RTM version. This suggests that the overhead of scheduling transactions is larger than that of taking locks. But if the work being done is large enough then this overhead is overshadowed by the improvements from the RTM implementation. So if the workload size and the number of threads being used to run that workload are appropriately tuned then the RTM version does better. But in situations where there is a mismatch between the workload size and the number of threads then the OLC version does better.
+
+We believe the RTM version does better because in OLC the transaction gets aborted at the end of the transaction where the version is checked for updates. In RTM the transaction gets aborted as soon as the updated version gets committed by another transaction since the version is in the read set of the transaction. Thus there is less wasted time in the RTM implementation.
+
+## References
+[1] Wang, Ziqi., et al. “Building a Bw-Tree Takes More Than Just Buzz Words.” SIGMOD ‘18 Proceedings of the 2018 International Conference on Management of Data, pp. 473–488.
+
+[2] Makreshanski, Darko., et al. “To Lock, Swap, or Elide: On the Interplay of Hardware Transactional Memory and Lock-Free Indexing.” VLDB Endowment, 41st International Conference on Very Large Data Bases (VLDB 2015): Proceedings of the VLDB Endowment, Volume 8, Number 1-13, Kohala Coast, Hawaii, USA, 31 August-4 September 2015, 2015, pp. 1298–1309.
+
+[3] Brown, Trevor. “A Template for Implementing Fast Lock-Free Trees Using HTM.”
+
+[4] Leis, Viktor, et al. “The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases.” 2013 IEEE 29th International Conference on Data Engineering (ICDE).
+
+[5][Fun With Intel Transaction Synchronization Extensions](https://software.intel.com/en-us/blogs/2013/07/25/fun-with-intel-transactional-synchronization-extensions)
+
+## Appendix
+1. [Graphs](https://docs.google.com/spreadsheets/d/1WICy5a5WEKHrQ-3FQfw11PJ7DvwZXqHyDOfVj2tSehs/edit?usp=sharing)
+
 
 
 

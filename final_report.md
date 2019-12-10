@@ -71,14 +71,14 @@ There were two system wide parameters that we had to set. The first is how many 
 #### Max Restart Count
 In this benchmark we scaled the maximum times an RTM transaction could be allowed to restart before resorting to the fallback path and graphed the speedup on datasets with a varying percentage of inserts. This was executed using 40 threads and 10 million operations were run per workload. 
 
-!(Speedup vs Max Restart Count)[images/1_max_recount.png]
+![Speedup vs Max Restart Count](images/1_max_recount.png)
 
 In general the maximum restart count had little effect on the performance of the system. Except for the outlier at 12 for 25% Insert workload there was little change in speedup across all the workloads. 
 
 We further investigated as to why this was the case by examining how many retries a transaction needed before succeeding. Below is a graph showing the number of operations that succeeded vs the number of retries that operation needed to succeed. Since lookups have a different pattern than inserts we graphed lookup retries and insert retries separately. 
 
-!(50% Insert Restart Counts)[images/2_max_recount.png]
-!(50% Lookup Restart Counts)[images/3_max_recount.png]
+![50% Insert Restart Counts](images/2_max_recount.png)
+![50% Lookup Restart Counts](images/3_max_recount.png)
 
 From this we can see that most transactions succeed without ever retrying. We omitted the graphs for other workloads with different Insert percentage as they displayed a very similar pattern. In the case of the 50% Insert workload 92% of inserts and 94% of lookups succeeded without ever retrying. This data holds true with our initial observation of maximum number of retries not affecting speedup as most transactions never retried. 
 

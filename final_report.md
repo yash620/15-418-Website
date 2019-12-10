@@ -30,6 +30,30 @@ We started off with this implementation as OLC is one of the most common paralle
 2. _xend: ends a transactional region
 3. _xabort: aborts the current running transaction.
 
+RTM operates by enabling sections of code to operate with transactional semantics. This means that with respect to other transactional sections each section operates as if it was isolated and atomic. This is achieved by adding all variables read to a transactions read set and all variables written to a write set. Whenever a transaction is committed a coherence notification is sent out invalidating the variables in the write set. If a current running transaction sees that the variables in it’s read and write sets are invalidated then it aborts. This is similar to OLC in that readers don’t block but writers invalidate other transactions. But unlike OLC approaches RTM isn’t guaranteed to make progress. To ensure progress it needs a fallback path that it can execute that doesn’t use RTM. 
+
+For our initial implementation we created a single threaded version of the B+Tree and encased each insert and lookup operation in an RTM transaction. Then we used the latch coupling implementation (not optimistic) as a fallback path which would be taken if the RTM transaction restarted too many times. More analysis about picking the maximum number of restarts is in the results section. As we began testing we noticed that the transactions were aborting ~80% of the time and resorting to the fallback path. We experimented with varying datasets and found that ordering inserts by increasing order of keys would only cause transactions to abort on node split as we expected. We realized this was because when key was being inserted into a node if the key was in the middle of the range of keys then the existing keys in the node would be shifted over to maintain sorted order. Shifting these keys over exceeded the memory limits of an RTM transaction causing it to abort. To address this we limited each node’s maximum number of entries to 31, as shifting that many keys was the memory limit for HTM transactions. 
+
+### Addressing Concurrency
+At this stage though we encountered corrupted data as there were race conditions while executing the operations. The RTM transaction was thread safe with respect to other RTM transactions and the fallback latch coupling implementation was thread safe with respect to itself. But they weren’t thread safe with respect to each other. For instance, even if a latch coupled traversal has taken a lock and is reading a node the RTM implementation could modify the data as it has no notion of a lock being taken. To fix this we had to add the lock of each node touched in an RTM traversal to the read set of the transaction. The RTM transaction would check if the lock is taken before going to a node, if it is taken then it would abort and retry. Also if the fallback path of another thread takes the lock it would execute a write to the lock variable which in turn would cause all transactions who have the lock in their read set to abort. This ensures that the RTM transaction and the latch coupled fallback path are thread safe with respect to each other. 
+
+These changes allowed our implementation to be correct but it wasn’t performant. The non-optimistic latch coupling path would take too many locks while traversing the tree and cause many transactions to abort. Whenever a new traversal was started it would take and release a lock on the root node, which involves writing to the lock. All running RTM transactions would have the lock for the root node in their read set and thus would be aborted by this write. 
+To get around this bottleneck we changed our fallback path to be an OLC implementation. In these cases the fallback path would only write to a node’s lock when modifying the node, therefore only aborting running RTM transactions when necessary. But this change brought back data corruption and race conditions.
+
+Having an OLC based fallback complicated the interaction between the RTM path and the fallback path. Now there were 4 possible paths of interaction between RTM and OLC at a specific node: 
+1. RTM Read and OLC Write 
+2. RTM Read and OLC Read
+3. RTM Write and OLC Write
+4. RTM Write and OLC Read. 
+
+RTM Read and OLC Write is addressed much like the synchronization in the non optimistic fall back implementation with the RTM checking if the node’s lock is free aborting if it isn’t and adding it to the read set if it is. If the OLC write starts first then the RTM read will see it and abort as the lock was taken. If the RTM read start first the OLC write will invalidate the lock and since it was in the RTM read set the transaction would get aborted. 
+
+In the case of RTM Read and OLC Read both can safely run concurrently so no extra synchronization is required. 
+
+The RTM Read and OLC Write case is solved in the same way as RTM Read and OLC Write with the RTM checking if the node’s lock is free. If RTM is committed before OLC Write then OLC write will see RTM write and will operate accordingly. If OLC write occurs before RTM is committed but after RTM has read the node then OLC will invalidate the node’s lock which is in the RTM read set and the RTM transaction gets aborted. 
+
+The RTM Write and OLC Read case wasn’t solved by using the same synchronization approach as the non-optimistic latch coupling implementation and was the cause of our data corruption and race condition. There is a possible race in that the OLC traversal has read a node but before it could release it’s read lock and validate that the node version hasn’t changed the RTM transaction could write to the node. In our first implementation the RTM transaction wasn’t modifying a node’s locks only reading them, so the OLC traversal would see that the node’s version is the same and validate the read even though it wasn’t a valid read. To fix this we needed the RTM transaction as well to update the node’s version number when it was writing to that node. 
+
 
 
 

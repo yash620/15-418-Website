@@ -14,9 +14,6 @@ namespace btreertm{
 
     enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
-    //static const uint64_t pageSize=4*1024;
-    
-    // (sizeof Key + sizeof Payload) * 31 + sizeof NodeBase
     static const uint64_t pageSize = 3968 + 72; 
 
     struct OptLock {
@@ -96,7 +93,6 @@ namespace btreertm{
                 Payload p;
             };
 
-            //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(Payload));
             static const uint64_t maxEntries=31;
             bool isSorted;
             Key keys[maxEntries];
@@ -146,24 +142,6 @@ namespace btreertm{
                     return false; 
                 }
                 assert(count<maxEntries);
-                // if (count) {
-                //    unsigned pos=lowerBound(k);
-                //    if ((pos<count) && (keys[pos]==k)) {
-                //        // Upsert
-                //        payloads[pos] = p;
-                //        return true;
-                //    }
-                //    memmove(keys+pos+1,keys+pos,sizeof(Key)*(count-pos));
-                //    memmove(payloads+pos+1,payloads+pos,sizeof(Payload)*(count-pos));
-                //    keys[pos]=k;
-                //    payloads[pos]=p;
-                // } else {
-                //    keys[0]=k;
-                //    payloads[0]=p;
-                // }
-
-                // count++;
-
                 keys[count] = k;
                 payloads[count] = p;
                 isSorted = false;
@@ -206,7 +184,6 @@ namespace btreertm{
     template<class Key>
         struct BTreeInner : public BTreeInnerBase {
             static const uint64_t maxEntries=31;
-            //static const uint64_t maxEntries=(pageSize-sizeof(NodeBase))/(sizeof(Key)+sizeof(NodeBase*));
             NodeBase* children[maxEntries];
             Key keys[maxEntries];
 
@@ -338,9 +315,6 @@ namespace btreertm{
                 int restartReason = 156;
         restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) { 
-                    //fprintf(stderr, "Going to latched version, key: %ld\n", k);
-                    //fprintf(stderr, "Due to %d\n", restartReason);
-                    //insertFallbackTimes++;
                     insertLatched(k, v);
                     return; 
                 }
@@ -358,9 +332,6 @@ namespace btreertm{
 
                 while (node->type==PageType::BTreeInner) {
                     auto inner = static_cast<BTreeInner<Key>*>(node);
-                    // if(node->has_lock == 1) {
-                    //     _xabort(1);
-                    // }
                     if(node->isLocked(node->typeVersionLockObsolete.load()) ) {
                         _xabort(1);
                     }
@@ -370,9 +341,6 @@ namespace btreertm{
                         if(parent->isLocked(parent->typeVersionLockObsolete.load()) ) {
                             _xabort(1);
                         }
-                        // if(parent->has_lock == 1) {
-                        //     _xabort(2);
-                        // }
                     }
 
                     // Split eagerly if full
@@ -413,18 +381,12 @@ namespace btreertm{
                     }
 
                 auto leaf = static_cast<BTreeLeaf<Key,Value>*>(node);
-                // if(leaf->has_lock == 1) {
-                //     _xabort(3);
-                // }
                 if(leaf->isLocked(leaf->typeVersionLockObsolete.load()))  {
                     _xabort(3);
                 }
 
                 // Split leaf if full
                 if (leaf->count>=leaf->maxEntries) {
-                    // Split
-                    // goToLatched = true;
-                    // _xabort(12);
                     Key sep; BTreeLeaf<Key,Value>* newLeaf = leaf->split(sep);
                     if (parent)
                         parent->insert(sep, newLeaf);
@@ -556,7 +518,6 @@ restart:
                 int restartCount = 0;
 restart:
                 if(restartCount++ > MAX_TRANSACTION_RESTART) {
-                    //lookupFallbackTimes++;
                     return lookupLatched(k, result);
                 }
 

@@ -49,7 +49,6 @@ void indexInsert(
     std::vector<int64_t>& values
 ) {
     for(auto i = startValue; i < endValue; i++){
-        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         idx.insert(keys[i], values[i]);
     }
 }
@@ -64,7 +63,6 @@ void indexLookupAssert(
     std::vector<int64_t>& values
 ) {
    for(auto i = startValue; i < endValue; i++){
-        //fprintf(stderr,"Thread %d, Looking Up Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         int64_t result;
         idx.lookup(keys[i], result);
         if(result != values[i]) {
@@ -85,7 +83,6 @@ void indexLookup(
     std::vector<int64_t>& values
 ) {
    for(auto i = startValue; i < endValue; i++){
-        //fprintf(stderr,"Thread %d, Inserting Key: %lld, Value %lld \n", threadId, keys[i], values[i]);
         int64_t result;
         idx.lookup(keys[i], result);
    } 
@@ -264,7 +261,6 @@ double multiInsertThreadedBenchmark(
         idx.clear();
         threads.clear();
     }
-    //printf("Took Insert Fallback average %f times \n", ((float)insertFallbackTimes)/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     return currElapsed; 
@@ -310,7 +306,6 @@ double multiLookupThreadedBenchmark(
         threads.clear();
     }
 
-    //printf("Average Lookup Fallback Times: %d \n", idx.lookupFallbackTimes/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
 
     idx.clear();
@@ -349,8 +344,6 @@ double multiThreadedMixedBenchmark(
         idx.clear(); 
     }
 
-    //printf("Average Insert Fallback times: %d \n", insertFallbackTimes/numRuns);
-    //printf("Average Lookup Fallback times: %d \n", lookupFallbackTimes/numRuns);
     printf("Execution Time: %.6fms \n", currElapsed);
     return currElapsed;
 }
@@ -586,6 +579,80 @@ void runRTMWeavedTests(int numThreads) {
     testMixedTreeMultiThreaded<btreertm::BTree<int64_t, int64_t>>(idx_weaved, numThreads);
 
     fprintf(stderr, "---------------------------------\n"); 
+}
+
+void runWeavedBenchmarks(int numThreads, int numOperations, double percentInsert) {
+    btreertm::BTree<int64_t, int64_t> idx_weaved(true);
+    btreertm::BTree<int64_t, int64_t> idx_rtm(false);
+    btreesinglethread::BTree<int64_t, int64_t> idx_single;
+
+
+    fprintf(stdout, "Running fallback counts benchmark: numThreads: %d, numOperations: %d, percentInsert: %f \n", 
+        numThreads, numOperations, percentInsert);
+    
+    if(percentInsert >= 1.0 || percentInsert <= 0.0) {
+        std::vector<int64_t> keys;
+        std::vector<int64_t> values;
+        keys.reserve(numOperations);
+        values.reserve(numOperations); 
+
+        generateRandomValues(numOperations, keys, values); 
+
+        if(percentInsert >= 1.0) {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded insert only idx_weaved \n");
+            multiInsertThreadedBenchmark(idx_weaved, numThreads, 5, keys, values);
+
+            fprintf(stdout, "Benchmarking Multithreaded insert only idx_rtm \n");
+            multiInsertThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "Benchmarking single threaded insert only idx_single \n");
+            singleThreadedInsertBenchmark(idx_single, keys, values, 5); 
+            fprintf(stdout, "------------------------------ \n"); 
+        } else {
+            fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 2, keys, values); 
+            fprintf(stdout, "Done Warming up the caches! \n");
+
+            fprintf(stdout, "Benchmarking Multithreaded lookup only idx_weaved \n");
+            multiLookupThreadedBenchmark(idx_weaved, numThreads, 5, keys, values);
+
+            fprintf(stdout, "Benchmarking Multithreaded lookup only idx_rtm \n");
+            multiLookupThreadedBenchmark(idx_rtm, numThreads, 5, keys, values); 
+
+            fprintf(stdout, "Benchmarking single threaded lookup only idx_single \n");
+            singleThreadedLookupBenchmark(idx_single, keys, values, 5); 
+            fprintf(stdout, "------------------------------ \n"); 
+        }
+
+        return;
+    }
+
+    workload::WorkloadGenerator generator;
+    std::vector<std::vector<workload::Operation>> workloads = 
+        generator.generateParallelWorkload(percentInsert, numOperations, numThreads);
+
+    fprintf(stdout, "Waming up cache: Benchmarking idx_rtm \n");
+    multiThreadedMixedBenchmark(idx_rtm, 2, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index weaved \n");
+    multiThreadedMixedBenchmark(idx_weaved, 5, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index rtm\n");
+    multiThreadedMixedBenchmark(idx_rtm, 5, workloads);
+
+    fprintf(stdout, "Running fallback counts benchmark index single");
+    Timer t;
+    for(int i = 0; i < workloads.size(); i++) {
+        executeWorkload(idx_single, workloads[i]);
+    }
+    double elapsed = t.elapsed(); 
+
+    fprintf(stdout, "Execution Time: %.6fs \n", elapsed);
+    fprintf(stdout, "------------------------------- \n");
 }
 
 int main(int argc, char *argv[]) {

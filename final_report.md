@@ -84,6 +84,37 @@ From this we can see that most transactions succeed without ever retrying. We om
 
 We also ran the same experiment on the OLC implementation. And found that the OLC implementation restarted even less with 99% of lookups and inserts succeeding without ever retrying. 
 
+#### Maximum Number of Entries Per Leaf Node
+In this benchmark we scaled the maximum number of entries a leaf node could contain before splitting. Using our optimization of sorting on the first lookup after insert or on a split we could increase the maximum number of entries beyond 31. Similar to the maximum restart count benchmark  we graphed the speedup on datasets with a varying percentage of inserts. This was also run on 40 threads with 10 million operations per workload. 
+
+![Maximum Number of Entries Per Leaf Node](images/MaxEntriesLeaf.png)
+
+Increasing the maximum number of entries significantly improved the speedup of the Insert only workload (100% Insert). It grew from a 3.5x speedup at 31 max entries to a 12x speedup with 400 max entries. This makes sense as in an insert only workload the entries in a leaf node are only sorted when the node is split and every other insert is much faster as it is just an append. Also increasing the node size also means that splits are less common making the sorting even rarer. 
+
+For all other workloads which had Inserts mixed with Lookups increasing the maximum number of entries per leaf reduced the speedup. This also makes sense are every Lookup followed by an Insert has to sort the leaf node. Even if the node was just sorted and a single value was inserted the following lookup would have to sort again. This incurs an O(n log(n)) cost on lookups rather than the original O(log (n)) cost to lookup at a leaf node. The 25% Insert workload peaked with 11.3x speedup with 60 max entries, the 50% Insert peaked at 5.3x speedup with 31 max entries, and the 75% Insert peaked at 4.5x speedup with 100 max entries. 
+
+In the lookup only workload (0%  Insert) the maximum number of entries didn’t affect the speedup. This is because for lookup only workloads the sorting cost is only encountered once, on the first lookup. Therefore the number of entries in the leaf node isn’t as much of a bottleneck. 
+
+### Transaction Weaving Evaluation
+
+Here we evaluate the transaction weaving approach we discussed in the approach section. The premise was that by having more smaller RTM transactions we would have fewer conflicts as the read and write sets of each transaction would be smaller and thus fewer insert and lookup operations would resort to the fallback path. 
+
+First we compared the fallback percentages between the original RTM implementation and the weaved implemented scaling the number of threads. We ran this on a variety of workloads, but here we will discuss the 50% Insert workload. The rest of the graphs are linked in the appendix.
+
+![Weaved Fallback](images/RTM_Weaved_Fallback.png)
+
+As we suspected in cases with more threads which would have more contention there was a lower fallback percentage for the weaved implementation. But this difference is minimal and didn’t improve the speedup. Below is a graph comparing the speedup of the two implementations on the same workload and the weaved implementation did worse. We believe this is because the number of times the fallback path was taken was already very small and the improvement from weaved is minimal. Therefore the extra overhead of starting and ending transactions overshadowed the weaved improvement. 
+
+![Weaved Fallback](images/RTM_Weaved_Speedup.png)
+
+### Comparisons Between OLC and RTM
+Here we evaluated the differences in speedup between the OLC implementation and RTM implementation at different workloads varying the percentage of Inserts. For each workload we ran two experiments. The first experiment scaled the number of threads and was run with 10,000,000 operations and the second experiment scaled the dataset size and was run with 40 threads. As a baseline we also graphed the speedup for an implementation that used non-optimistic latch coupling which we labeled as Locked.
+
+#### Lookup Only Workload
+
+
+
+
 
 
 
